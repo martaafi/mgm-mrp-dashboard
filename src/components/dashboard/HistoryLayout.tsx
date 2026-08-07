@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { format } from "date-fns";
 import {
   AlertTriangle,
   Clock,
@@ -31,11 +32,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   // Format date helper: YYYY-MM-DD -> DD-MM-YYYY
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
-    const parts = dateString.split("-");
-    if (parts.length === 3) {
-      return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    }
-    return dateString;
+    return format(new Date(dateString), "dd MMM yyyy");
   };
 
   const getTodayStr = () => {
@@ -356,10 +353,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   return (
     <div className="flex flex-col md:flex-row gap-6 pb-8 h-full min-h-[500px] items-start">
       {/* Left Column: List of Changes */}
-      <div className="w-full md:w-1/3 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden sticky top-6 max-h-[calc(100vh-2rem)]">
-        <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-          <h2 className="font-bold text-slate-800 flex items-center">
-            <Clock className="w-5 h-5 mr-2 text-indigo-500" />
+      <div className="w-full md:w-1/3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden sticky top-6 max-h-[calc(100vh-2rem)] transition-colors">
+        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between transition-colors">
+          <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
+            <Clock className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
             History Perubahan PPIC
           </h2>
           <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full">
@@ -367,10 +364,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
           </span>
         </div>
 
-        <div className="flex-1 overflow-auto bg-slate-50/50 p-3 space-y-3">
+        <div className="flex-1 overflow-auto bg-slate-50/50 dark:bg-slate-900/50 p-3 space-y-3 transition-colors">
           {changedPlans.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-slate-500 text-sm text-center px-4">
-              <Info className="w-8 h-8 mb-2 text-slate-300" />
+            <div className="flex flex-col items-center justify-center h-40 text-slate-500 dark:text-slate-400 text-sm text-center px-4">
+              <Info className="w-8 h-8 mb-2 text-slate-300 dark:text-slate-600" />
               <p>Belum ada rekaman perubahan Planning Style.</p>
             </div>
           ) : (
@@ -386,10 +383,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                     isSelected
                       ? isWarning
                         ? "bg-red-500 border-2 border-white text-white shadow-lg shadow-red-500/40 ring-2 ring-red-500 animate-pulse"
-                        : "bg-indigo-50 border border-indigo-300 shadow-sm ring-1 ring-indigo-300"
+                        : "bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700 shadow-sm ring-1 ring-indigo-300 dark:ring-indigo-700"
                       : isWarning
                         ? "bg-red-500 border-2 border-red-500 text-white hover:bg-red-600 shadow-md animate-pulse"
-                        : "bg-white border border-slate-200 hover:border-indigo-300 hover:shadow-sm text-slate-800"
+                        : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm text-slate-800 dark:text-slate-200"
                   }`}
                 >
                   <div className="flex justify-between items-start mb-2">
@@ -419,14 +416,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
                   <div className="space-y-1">
                     <div
-                      className={`text-xs line-through ${isWarning ? "text-red-200" : "text-slate-500"}`}
+                      className={`text-xs line-through ${isWarning ? "text-red-200" : "text-slate-500 dark:text-slate-400"}`}
                     >
                       {plan.historyDisplayStyle ||
                         plan.historyStyle ||
                         "Kosong"}
                     </div>
                     <div
-                      className={`flex items-center text-sm font-bold ${isWarning ? "text-white" : "text-slate-800"}`}
+                      className={`flex items-center text-sm font-bold ${isWarning ? "text-white" : "text-slate-800 dark:text-slate-200"}`}
                     >
                       <ArrowRight
                         className={`w-3 h-3 mr-1.5 ${isWarning ? "text-red-200" : "text-emerald-500"}`}
@@ -436,14 +433,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                   </div>
 
                   <div
-                    className={`mt-3 text-[10px] flex items-center justify-between ${isWarning ? "text-red-100" : "text-slate-400"}`}
+                    className={`mt-3 text-[10px] flex items-center justify-between ${isWarning ? "text-red-100" : "text-slate-400 dark:text-slate-500"}`}
                   >
                     <span>
                       Terjadi perubahan planning setelah tanggal:{" "}
-                      {plan.snapshotDate || "Unknown"}
+                      {plan.snapshotDate ? formatDate(plan.snapshotDate) : "Unknown"}
                     </span>
                     <ChevronRight
-                      className={`w-4 h-4 ${isSelected ? (isWarning ? "text-white" : "text-indigo-500") : isWarning ? "text-red-200" : "text-slate-300"}`}
+                      className={`w-4 h-4 ${isSelected ? (isWarning ? "text-white" : "text-indigo-500 dark:text-indigo-400") : isWarning ? "text-red-200" : "text-slate-300 dark:text-slate-600"}`}
                     />
                   </div>
                 </div>
@@ -458,17 +455,17 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="p-1 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <span className="text-xs font-medium text-slate-600">
+            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
               Page {currentPage} of {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="p-1 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -480,20 +477,20 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       <div className="w-full md:w-2/3 flex flex-col gap-6 overflow-x-hidden min-w-0">
         {/* 1. Macro Factory Impact Table */}
         {factoryImpact && (
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 md:p-6 shrink-0">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 md:p-6 shrink-0 transition-colors">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div>
-                <h3 className="text-lg font-bold text-slate-800 flex items-center">
-                  <Activity className="w-5 h-5 mr-2 text-indigo-500" />
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                  <Activity className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
                   Dampak Terhadap Kebutuhan Mesin
                 </h3>
-                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                   Dampak perubahan planning PPIC pada rentang waktu
-                  <span className="font-semibold text-slate-700 mx-1">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 mx-1">
                     {formatDate(factoryImpact.startDate)}
                   </span>
                   hingga
-                  <span className="font-semibold text-slate-700 mx-1">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 mx-1">
                     {formatDate(factoryImpact.endDate)}
                   </span>
                   terhadap total kebutuhan mesin pabrik.
@@ -501,13 +498,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
               </div>
 
               {factoryImpact.hasNewShortage && (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 flex items-center shadow-sm">
-                  <AlertCircle className="w-5 h-5 text-red-500 mr-2 shrink-0" />
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg px-4 py-2 flex items-center shadow-sm">
+                  <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mr-2 shrink-0" />
                   <div>
-                    <h4 className="text-xs font-bold text-red-800">
+                    <h4 className="text-xs font-bold text-red-800 dark:text-red-300">
                       Peringatan!
                     </h4>
-                    <p className="text-[11px] text-red-600">
+                    <p className="text-[11px] text-red-600 dark:text-red-400">
                       Perubahan style pada rentang waktu ini menambah shortage
                       mesin.
                     </p>
@@ -516,21 +513,21 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
               )}
             </div>
 
-            <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm overflow-x-auto">
+            <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm overflow-x-auto transition-colors">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Jenis Mesin</th>
                     <th className="px-4 py-3 font-semibold text-center">
                       Tersedia
                     </th>
-                    <th className="px-4 py-3 font-semibold text-center text-slate-500">
+                    <th className="px-4 py-3 font-semibold text-center text-slate-500 dark:text-slate-400">
                       Kebutuhan Sebelum Perubahan Planning
                     </th>
-                    <th className="px-4 py-3 font-semibold text-center text-indigo-600">
+                    <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400">
                       Kebutuhan Setelah Perubahan Planning
                     </th>
-                    <th className="px-4 py-3 font-semibold text-center text-slate-500">
+                    <th className="px-4 py-3 font-semibold text-center text-slate-500 dark:text-slate-400">
                       Gap Sebelum Perubahan
                     </th>
                     <th className="px-4 py-3 font-semibold text-center">
@@ -541,53 +538,53 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
                   {factoryImpact.comparison.map((row, i) => {
-                    let rowClass = "bg-white";
+                    let rowClass = "bg-white dark:bg-slate-900";
                     let statusText = "Aman";
-                    let statusClass = "text-emerald-600 bg-emerald-50";
+                    let statusClass = "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30";
 
                     if (row.isNowShortage) {
-                      rowClass = "bg-white";
+                      rowClass = "bg-white dark:bg-slate-900";
                       statusText = "Jadi Shortage!";
-                      statusClass = "text-red-600 font-bold";
+                      statusClass = "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
                     } else if (row.isWorseShortage) {
-                      rowClass = "bg-white";
+                      rowClass = "bg-white dark:bg-slate-900";
                       statusText = "Shortage Bertambah";
-                      statusClass = "text-red-600 font-bold";
+                      statusClass = "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
                     } else if (row.newGap < 0) {
                       statusText = "Shortage (Tetap)";
-                      statusClass = "text-orange-600 font-medium";
+                      statusClass = "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
                     }
 
                     return (
                       <tr
                         key={i}
-                        className={`${rowClass} transition-colors hover:bg-slate-50/50`}
+                        className={`${rowClass} transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50`}
                       >
-                        <td className="px-4 py-4 font-medium text-slate-800">
+                        <td className="px-4 py-4 font-medium text-slate-800 dark:text-slate-200">
                           {row.machine}
                         </td>
-                        <td className="px-4 py-4 text-center font-medium text-slate-600 bg-slate-50/50 border-r border-slate-100">
+                        <td className="px-4 py-4 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors">
                           {row.available}
                         </td>
-                        <td className="px-4 py-4 text-center text-slate-400">
+                        <td className="px-4 py-4 text-center text-slate-400 dark:text-slate-500">
                           {row.oldReq}
                         </td>
-                        <td className="px-4 py-4 text-center font-bold text-indigo-700 text-base">
+                        <td className="px-4 py-4 text-center font-bold text-indigo-700 dark:text-indigo-400 text-base">
                           {row.newReq}
                         </td>
-                        <td className="px-4 py-4 text-center text-slate-500 border-l border-slate-100">
+                        <td className="px-4 py-4 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors">
                           {row.oldGap}
                         </td>
                         <td
-                          className={`px-4 py-4 text-center font-bold text-base ${row.newGap < 0 ? "text-red-600" : "text-emerald-600"}`}
+                          className={`px-4 py-4 text-center font-bold text-base ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
                         >
                           {row.newGap}
                         </td>
-                        <td className="px-4 py-4 text-center border-l border-slate-100 align-middle">
+                        <td className="px-4 py-4 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle">
                           <div
-                            className={`text-xs text-center leading-tight mx-auto ${statusClass}`}
+                            className={`text-xs text-center leading-tight mx-auto px-2 py-1 rounded-md ${statusClass}`}
                           >
                             {statusText}
                           </div>
@@ -602,13 +599,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         )}
 
         {/* 2. Detail Analysis per History Item */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden shrink-0">
-          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-            <h2 className="font-bold text-slate-800 flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-emerald-500" />
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden shrink-0 transition-colors">
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 transition-colors">
+            <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
+              <Activity className="w-5 h-5 mr-2 text-emerald-500 dark:text-emerald-400" />
               Detail Perubahan Kebutuhan Mesin
             </h2>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Menganalisis apakah perubahan planning style menyebabkan lonjakan
               kebutuhan mesin yang signifikan
             </p>
@@ -616,8 +613,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
           <div className="flex-1 overflow-auto p-6">
             {!selectedPlan ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                <Activity className="w-12 h-12 mb-3 text-slate-200" />
+              <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
+                <Activity className="w-12 h-12 mb-3 text-slate-200 dark:text-slate-700" />
                 <p>
                   Pilih riwayat perubahan di sebelah kiri untuk melihat
                   dampaknya.
@@ -626,21 +623,21 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
             ) : (
               <div className="space-y-6">
                 {/* Context Header */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between transition-colors">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-800">
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                       Perubahan Plan Perhitungan Kebutuhan Mesin{" "}
                       {selectedPlan.line} ({formatDate(selectedPlan.date)})
                     </h3>
-                    <div className="flex items-center mt-2 text-xs text-slate-600 gap-2 flex-wrap">
-                      <span className="bg-slate-200 px-2 py-1 rounded">
+                    <div className="flex items-center mt-2 text-xs text-slate-600 dark:text-slate-400 gap-2 flex-wrap">
+                      <span className="bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">
                         Lama:{" "}
-                        <strong className="text-slate-700">
+                        <strong className="text-slate-700 dark:text-slate-300">
                           {selectedPlan.historyStyle || "Kosong"}
                         </strong>
                       </span>
-                      <ArrowRight className="w-4 h-4 text-slate-400" />
-                      <span className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded">
+                      <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                      <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400 px-2 py-1 rounded">
                         Baru: <strong>{selectedPlan.style || "Kosong"}</strong>
                       </span>
                     </div>
@@ -648,13 +645,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                 </div>
 
                 {!selectedPlan.isStyleChanged ? (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 flex items-start">
-                    <Info className="w-6 h-6 text-blue-500 mr-3 shrink-0 mt-0.5" />
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-lg p-5 flex items-start">
+                    <Info className="w-6 h-6 text-blue-500 dark:text-blue-400 mr-3 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-sm font-bold text-blue-800 mb-1">
+                      <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-1">
                         Aman, Hanya Penambahan/Pengurangan Style Planning
                       </h4>
-                      <p className="text-xs text-blue-600 leading-relaxed">
+                      <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">
                         Perubahan yang dilakukan oleh PPIC hanya sekadar
                         menambah atau mengurangi <strong>Planning Style</strong>
                         , tetapi tidak mengubah acuan{" "}
@@ -668,13 +665,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                   </div>
                 ) : !impactAnalysis ||
                   impactAnalysis.comparison.length === 0 ? (
-                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 flex items-start">
-                    <AlertCircle className="w-6 h-6 text-slate-400 mr-3 shrink-0 mt-0.5" />
+                  <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-5 flex items-start">
+                    <AlertCircle className="w-6 h-6 text-slate-400 dark:text-slate-500 mr-3 shrink-0 mt-0.5" />
                     <div>
-                      <h4 className="text-sm font-bold text-slate-700 mb-1">
+                      <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
                         Tidak Ada Data Kebutuhan
                       </h4>
-                      <p className="text-xs text-slate-500 leading-relaxed">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                         Sistem tidak dapat membandingkan kebutuhan karena data
                         mesin untuk style ini belum terdaftar di database.
                       </p>
@@ -683,13 +680,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                 ) : (
                   <div className="space-y-4">
                     {impactAnalysis.hasCriticalImpact && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center shadow-sm">
-                        <AlertTriangle className="w-6 h-6 text-amber-500 mr-4 shrink-0" />
+                      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg p-4 flex items-center shadow-sm">
+                        <AlertTriangle className="w-6 h-6 text-amber-500 dark:text-amber-400 mr-4 shrink-0" />
                         <div>
-                          <h4 className="text-sm font-bold text-amber-800 mb-1">
+                          <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-1">
                             Peringatan: Kebutuhan Mesin Melonjak!
                           </h4>
-                          <p className="text-xs text-amber-700 leading-relaxed">
+                          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
                             Perubahan style ini membutuhkan{" "}
                             <strong>
                               mesin baru yang sebelumnya tidak disiapkan
@@ -702,9 +699,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                       </div>
                     )}
 
-                    <div className="border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm transition-colors">
                       <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                        <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
                           <tr>
                             <th className="px-4 py-3 font-semibold">
                               Jenis Mesin
@@ -720,23 +717,23 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200">
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
                           {impactAnalysis.comparison.map((row, i) => {
-                            let rowClass = "bg-white";
-                            let diffClass = "text-slate-500";
+                            let rowClass = "bg-white dark:bg-slate-900";
+                            let diffClass = "text-slate-500 dark:text-slate-400";
                             let diffText = "Tetap";
 
                             if (row.isNew) {
-                              rowClass = "bg-red-50";
-                              diffClass = "text-red-600 font-bold";
+                              rowClass = "bg-red-50 dark:bg-red-900/30";
+                              diffClass = "text-red-600 dark:text-red-400 font-bold";
                               diffText = `+${row.diff} (Mesin Baru)`;
                             } else if (row.isIncreased) {
-                              rowClass = "bg-amber-50";
-                              diffClass = "text-amber-600 font-bold";
+                              rowClass = "bg-amber-50 dark:bg-amber-900/30";
+                              diffClass = "text-amber-600 dark:text-amber-400 font-bold";
                               diffText = `+${row.diff} (Bertambah)`;
                             } else if (row.isDecreased) {
-                              rowClass = "bg-emerald-50";
-                              diffClass = "text-emerald-600 font-medium";
+                              rowClass = "bg-emerald-50 dark:bg-emerald-900/30";
+                              diffClass = "text-emerald-600 dark:text-emerald-400 font-medium";
                               diffText = `${row.diff} (Berkurang)`;
                             }
 
@@ -745,13 +742,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 key={i}
                                 className={`${rowClass} transition-colors hover:brightness-95`}
                               >
-                                <td className="px-4 py-3 font-medium text-slate-800">
+                                <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
                                   {row.machine}
                                 </td>
-                                <td className="px-4 py-3 text-center text-slate-500">
+                                <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
                                   {row.oldReq || "-"}
                                 </td>
-                                <td className="px-4 py-3 text-center font-bold text-slate-800">
+                                <td className="px-4 py-3 text-center font-bold text-slate-800 dark:text-slate-200">
                                   {row.newReq || "-"}
                                 </td>
                                 <td

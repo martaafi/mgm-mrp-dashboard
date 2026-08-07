@@ -5,6 +5,31 @@ import {
   MachineRequirementPerStyle,
   MachineAvailability,
 } from "../types/mrp";
+import { format } from "date-fns";
+
+const parseDateString = (dateStr: string): string => {
+  if (!dateStr) return "";
+  
+  // If it's DD/MM/YYYY
+  if (dateStr.includes("/")) {
+    const parts = dateStr.split("/");
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+  } 
+  
+  // Try JS native parse (handles 7-Aug-2026, 7 Aug 2026, etc)
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+     const year = d.getFullYear();
+     const month = (d.getMonth() + 1).toString().padStart(2, "0");
+     const day = d.getDate().toString().padStart(2, "0");
+     return `${year}-${month}-${day}`;
+  }
+  
+  return dateStr;
+};
 
 const SHEET_ID = "1KgVosx10jSkGAbPx8CFxWV3koQOb_BuAaaBBDO4wuZU";
 export const GOOGLE_SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit?usp=sharing`;
@@ -40,23 +65,14 @@ export const fetchPlans = async (): Promise<ProductionPlan[]> => {
     const row = data[i];
     if (!row || row.length < 4) continue;
 
-    let rawDate = row[0] || "";
-    // Format date from DD/MM/YYYY or MM/DD/YYYY to YYYY-MM-DD
-    if (rawDate && rawDate.includes("/")) {
-      const parts = rawDate.split("/");
-      if (parts.length === 3) {
-        // Assuming DD/MM/YYYY based on previous logic
-        const [day, month, year] = parts; 
-        rawDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-      }
-    }
+    let rawDate = parseDateString(row[0] || "");
 
     const line = row[1] || "";
     const displayStyle = row[2] || "";
     const style = row[3] || "";
 
     // History columns
-    const snapshotDate = row[4] || "";
+    let snapshotDate = parseDateString(row[4] || "");
     const historyDisplayStyle = row[5] || "";
     const historyStyle = row[6] || "";
     const isDisplayStyleChanged = (row[7] || "").toString().trim().toLowerCase() === "ya";
@@ -119,14 +135,7 @@ export const fetchAvailability = async (): Promise<MachineAvailability[]> => {
     const row = data[i];
     if (!row || row.length < 3) continue;
 
-    let rawDate = row[0] || "";
-    if (rawDate && rawDate.includes("/")) {
-      const parts = rawDate.split("/");
-      if (parts.length === 3) {
-        const [month, day, year] = parts;
-        rawDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-      }
-    }
+    let rawDate = parseDateString(row[0] || "");
 
     const jenisMesin = row[1] || "";
     const jumlahMesin = parseFloat(row[2]) || 0;
@@ -215,14 +224,7 @@ export const fetchAllMRPData = async (
     fetchAvailability(),
   ]);
 
-  const now = new Date();
-  const day = now.getDate().toString().padStart(2, "0");
-  const month = (now.getMonth() + 1).toString().padStart(2, "0");
-  const year = now.getFullYear();
-  const hours = now.getHours().toString().padStart(2, "0");
-  const minutes = now.getMinutes().toString().padStart(2, "0");
-  const seconds = now.getSeconds().toString().padStart(2, "0");
-  const lastUpdated = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+  const lastUpdated = format(new Date(), "dd MMM yyyy HH:mm:ss");
 
   try {
     localStorage.setItem(CACHE_KEYS.PLANS, JSON.stringify(plans));

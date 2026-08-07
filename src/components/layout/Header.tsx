@@ -8,6 +8,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { GOOGLE_SHEET_URL } from "../../utils/googleSheetsAPI";
+import { Moon, Sun } from "lucide-react";
 
 interface HeaderProps {
   onOpenDataManager: () => void;
@@ -16,6 +17,8 @@ interface HeaderProps {
   onExportCSV: () => void;
   onRefreshData: () => void;
   isRefreshing: boolean;
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -25,9 +28,11 @@ export const Header: React.FC<HeaderProps> = ({
   onExportCSV,
   onRefreshData,
   isRefreshing,
+  isDarkMode,
+  toggleDarkMode,
 }) => {
   return (
-    <header className="bg-white text-slate-800 border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <header className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           {/* Logo and Title */}
@@ -37,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-800">
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-800 dark:text-white">
                   Machine Requirement Planning Dashboard
                 </h1>
               </div>
@@ -45,18 +50,20 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             {/* Refresh Data Button */}
             <button
               onClick={onRefreshData}
               disabled={isRefreshing}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
               title="Force re-fetch latest data from Google Sheets and update browser cache"
             >
               <RefreshCw
                 className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin" : ""}`}
               />
-              <span>{isRefreshing ? "Syncing..." : "Refresh Data"}</span>
+              <span className="hidden sm:inline">
+                {isRefreshing ? "Syncing..." : "Refresh Data"}
+              </span>
             </button>
 
             {/* Google Sheets Link Button */}
@@ -64,37 +71,37 @@ export const Header: React.FC<HeaderProps> = ({
               href={GOOGLE_SHEET_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors shrink-0"
               title="Open source Google Spreadsheet (Plan, OB IE, Ketersediaan Mesin)"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="hidden sm:inline">Google Sheets</span>
-              <ExternalLink className="w-3 h-3 text-slate-400" />
+              <span className="hidden sm:inline">Sheets</span>
+              <ExternalLink className="w-3 h-3 text-slate-400 hidden sm:inline" />
             </a>
 
             {/* Data Source & Sheets Manager */}
             <button
               onClick={onOpenDataManager}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors shrink-0"
               title="View or edit the underlying Google Sheets Plan, OB IE, and Machine Availability tables"
             >
               <Database className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Data Source / Sync</span>
+              <span className="hidden sm:inline">Data Source</span>
             </button>
 
             {/* Export Dropdown / Buttons */}
-            <div className="inline-flex rounded-lg shadow-sm">
+            <div className="inline-flex rounded-lg shadow-sm shrink-0">
               <button
                 onClick={onExportExcel}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-l-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-l-lg text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
                 title="Export Overall Machine Requirements & Line Matrix to Excel (.xlsx)"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Export Excel</span>
+                <span className="hidden sm:inline">Excel</span>
               </button>
               <button
                 onClick={onExportCSV}
-                className="inline-flex items-center px-2.5 py-1.5 rounded-r-lg text-xs font-medium bg-indigo-700 hover:bg-indigo-800 text-white border-l border-indigo-500 transition-colors"
+                className="inline-flex items-center px-2 py-1.5 rounded-r-lg text-xs font-medium bg-indigo-700 hover:bg-indigo-800 text-white border-l border-indigo-500 transition-colors"
                 title="Export Summary CSV"
               >
                 <span>CSV</span>
@@ -104,11 +111,24 @@ export const Header: React.FC<HeaderProps> = ({
             {/* PDF / Printable Report */}
             <button
               onClick={onOpenReportModal}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"
+              className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors shrink-0"
               title="Open printable IE report for PDF export or production meetings"
             >
               <FileText className="w-3.5 h-3.5 text-amber-600" />
-              <span>Print / PDF Report</span>
+              <span className="hidden sm:inline">Report</span>
+            </button>
+
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+              title="Toggle Dark Mode"
+            >
+              {isDarkMode ? (
+                <Sun className="w-3.5 h-3.5" />
+              ) : (
+                <Moon className="w-3.5 h-3.5" />
+              )}
             </button>
           </div>
         </div>

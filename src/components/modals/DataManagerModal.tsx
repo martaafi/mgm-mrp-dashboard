@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { format } from "date-fns";
 import {
   X,
   Database,
@@ -19,6 +20,7 @@ import {
   MachineAvailability,
 } from "../../types/mrp";
 import { GOOGLE_SHEET_URL } from "../../utils/googleSheetsAPI";
+import { DateRangePicker } from "../filters/DateRangePicker";
 
 interface DataManagerModalProps {
   isOpen: boolean;
@@ -93,26 +95,26 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
     const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
     if (totalPages <= 1) return null;
     return (
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-slate-200 sm:px-6">
+      <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 sm:px-6 transition-colors">
         <div className="flex justify-between sm:hidden w-full">
           <button
             onClick={() => setPage(currentPage - 1)}
             disabled={currentPage === 1}
-            className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 transition-colors"
+            className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
           >
             Previous
           </button>
           <button
             onClick={() => setPage(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 disabled:opacity-50 transition-colors"
+            className="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
           >
             Next
           </button>
         </div>
         <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs text-slate-700">
+            <p className="text-xs text-slate-700 dark:text-slate-300">
               Showing{" "}
               <span className="font-bold">
                 {(currentPage - 1) * ITEMS_PER_PAGE + 1}
@@ -132,18 +134,18 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
               <button
                 onClick={() => setPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
+                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 dark:text-slate-500 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
               >
                 <span className="sr-only">Previous</span>
                 <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               </button>
-              <span className="relative inline-flex items-center px-4 py-2 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-300 focus:outline-offset-0 bg-slate-50">
+              <span className="relative inline-flex items-center px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 focus:outline-offset-0 bg-slate-50 dark:bg-slate-800/50">
                 Page {currentPage} of {totalPages}
               </span>
               <button
                 onClick={() => setPage(currentPage + 1)}
                 disabled={currentPage === totalPages}
-                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
+                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 dark:text-slate-500 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
               >
                 <span className="sr-only">Next</span>
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -239,39 +241,39 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-5xl w-full overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl max-w-5xl w-full overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200 transition-colors">
         {/* Modal Header */}
-        <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between transition-colors">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-slate-800">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-800 dark:text-slate-100">
                 Data Source &amp; Google Spreadsheet Sync
               </h2>
-              <p className="text-xs text-slate-500"></p>
+              <p className="text-xs text-slate-500 dark:text-slate-400"></p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Source Google Sheet Banner */}
-        <div className="bg-slate-50 px-6 py-3 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center space-x-2 text-xs text-slate-700">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="bg-slate-50 dark:bg-slate-800/30 px-6 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+          <div className="flex items-center space-x-2 text-xs text-slate-700 dark:text-slate-300">
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-500 shrink-0" />
             <span>
               Connected Google Spreadsheet:{" "}
               <a
                 href={GOOGLE_SHEET_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-emerald-700 hover:underline font-mono ml-1 break-all"
+                className="text-emerald-700 dark:text-emerald-400 hover:underline font-mono ml-1 break-all"
               >
                 Planning Kebutuhan Mesin
               </a>
@@ -283,7 +285,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
             {!showConfirmReset ? (
               <button
                 onClick={() => setShowConfirmReset(true)}
-                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 transition-colors shadow-sm"
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 transition-colors shadow-sm"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset to Default</span>
@@ -304,7 +306,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                 </button>
                 <button
                   onClick={() => setShowConfirmReset(false)}
-                  className="px-2.5 py-1 rounded bg-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-300"
+                  className="px-2.5 py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
                 >
                   Cancel
                 </button>
@@ -314,13 +316,13 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
         </div>
 
         {/* Sheet Tabs Navigation */}
-        <div className="bg-slate-50 px-6 border-b border-slate-200 flex space-x-2">
+        <div className="bg-slate-50 dark:bg-slate-900 px-6 border-b border-slate-200 dark:border-slate-800 flex space-x-2 transition-colors overflow-x-auto">
           <button
             onClick={() => setActiveSheet("plan")}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 ${
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 shrink-0 ${
               activeSheet === "plan"
-                ? "border-indigo-600 text-indigo-600 bg-white shadow-sm"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-indigo-600 dark:border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 shadow-sm"
+                : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             <Table className="w-3.5 h-3.5" />
@@ -328,10 +330,10 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
           </button>
           <button
             onClick={() => setActiveSheet("ob")}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 ${
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 shrink-0 ${
               activeSheet === "ob"
-                ? "border-indigo-600 text-indigo-600 bg-white shadow-sm"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-indigo-600 dark:border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 shadow-sm"
+                : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             <Table className="w-3.5 h-3.5" />
@@ -341,10 +343,10 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
           </button>
           <button
             onClick={() => setActiveSheet("avail")}
-            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 ${
+            className={`py-3 px-4 text-xs font-bold border-b-2 transition-colors flex items-center space-x-1.5 shrink-0 ${
               activeSheet === "avail"
-                ? "border-indigo-600 text-indigo-600 bg-white shadow-sm"
-                : "border-transparent text-slate-500 hover:text-slate-800"
+                ? "border-indigo-600 dark:border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 shadow-sm"
+                : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
             }`}
           >
             <Table className="w-3.5 h-3.5" />
@@ -360,32 +362,22 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
           {activeSheet === "plan" && (
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                <span className="text-xs font-semibold text-slate-800">
+                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                   Production Planning Style by PPIC
                 </span>
                 
                 <div className="flex items-center space-x-2">
-                  <div className="flex items-center bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus-within:border-indigo-500 shadow-sm">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 mr-1.5 shrink-0" />
-                    <input
-                      type="date"
-                      value={planStartDate}
-                      onChange={(e) => { setPlanStartDate(e.target.value); setCurrentPagePlan(1); }}
-                      className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer"
-                    />
-                    <span className="text-slate-400 text-xs font-semibold px-1">to</span>
-                    <input
-                      type="date"
-                      value={planEndDate}
-                      onChange={(e) => { setPlanEndDate(e.target.value); setCurrentPagePlan(1); }}
-                      className="bg-transparent text-xs font-medium text-slate-800 focus:outline-none cursor-pointer"
-                    />
-                  </div>
+                  <DateRangePicker
+                    startDate={planStartDate}
+                    endDate={planEndDate}
+                    onStartDateChange={(date) => { setPlanStartDate(date); setCurrentPagePlan(1); }}
+                    onEndDateChange={(date) => { setPlanEndDate(date); setCurrentPagePlan(1); }}
+                  />
                   
                   <select
                     value={planLineFilter}
                     onChange={(e) => { setPlanLineFilter(e.target.value); setCurrentPagePlan(1); }}
-                    className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-600 shadow-sm font-semibold"
+                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 shadow-sm font-semibold transition-colors"
                   >
                     <option value="">All Lines</option>
                     {uniqueLines.map(line => (
@@ -395,12 +387,12 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto flex flex-col">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden overflow-x-auto flex flex-col transition-colors">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-600 uppercase text-[10px]">
+                    <tr className="bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 uppercase text-[10px]">
                       <th
-                        className="p-2 border-b border-slate-200 font-semibold cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                        className="p-2 border-b border-slate-200 dark:border-slate-700 font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors select-none"
                         onClick={() => handlePlanSort("date")}
                       >
                         <div className="flex items-center space-x-1">
@@ -408,12 +400,12 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                           {planSortKey === "date" ? (
                             planSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
                           ) : (
-                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50" />
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500 opacity-50" />
                           )}
                         </div>
                       </th>
                       <th
-                        className="p-2 border-b border-slate-200 font-semibold cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                        className="p-2 border-b border-slate-200 dark:border-slate-700 font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors select-none"
                         onClick={() => handlePlanSort("line")}
                       >
                         <div className="flex items-center space-x-1">
@@ -421,12 +413,12 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                           {planSortKey === "line" ? (
                             planSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
                           ) : (
-                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50" />
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500 opacity-50" />
                           )}
                         </div>
                       </th>
                       <th
-                        className="p-2 border-b border-slate-200 font-semibold cursor-pointer hover:bg-slate-200 transition-colors select-none"
+                        className="p-2 border-b border-slate-200 dark:border-slate-700 font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors select-none"
                         onClick={() => handlePlanSort("style")}
                       >
                         <div className="flex items-center space-x-1">
@@ -434,22 +426,22 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                           {planSortKey === "style" ? (
                             planSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
                           ) : (
-                            <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50" />
+                            <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500 opacity-50" />
                           )}
                         </div>
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {paginatedPlans.map((p, index) => (
-                      <tr key={`plan-${index}`} className="hover:bg-slate-50">
-                        <td className="p-2.5 text-indigo-700 font-medium">
-                          {p.date}
+                      <tr key={`plan-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="p-2.5 text-indigo-700 dark:text-indigo-400 font-medium">
+                          {p.date ? format(new Date(p.date), "dd MMM yyyy") : "-"}
                         </td>
-                        <td className="p-2.5 font-bold text-slate-800">
+                        <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
                           {p.line}
                         </td>
-                        <td className="p-2.5 text-slate-800 font-semibold truncate max-w-xs" title={p.displayStyle || p.style}>
+                        <td className="p-2.5 text-slate-800 dark:text-slate-200 font-semibold truncate max-w-xs" title={p.displayStyle || p.style}>
                           {p.displayStyle || p.style}
                         </td>
                       </tr>
@@ -470,7 +462,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-3">
                 <div>
-                  <span className="text-sm font-bold text-slate-800 block">
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200 block">
                     {obStyleFilter
                       ? `Kebutuhan Mesin Style ${obStyleFilter}`
                       : "Kebutuhan Mesin Berdasarkan Style"}
@@ -479,7 +471,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                 <select
                   value={obStyleFilter}
                   onChange={(e) => handleObStyleFilter(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-600 w-full sm:w-64 shadow-sm font-semibold"
+                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 w-full sm:w-64 shadow-sm font-semibold transition-colors"
                 >
                   <option value="">Semua Style</option>
                   {uniqueStyles.map((style) => (
@@ -490,10 +482,10 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                 </select>
               </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto flex flex-col">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden overflow-x-auto flex flex-col transition-colors">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-600 uppercase">
+                    <tr className="bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 uppercase">
                       <th className="p-2.5">Style</th>
                       <th className="p-2.5">Jenis Mesin</th>
                       <th className="p-2.5 text-right">Total Kebutuhan</th>
@@ -501,24 +493,24 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                       <th className="p-2.5 text-right">Spare</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {paginatedRequirements.map((req, index) => (
-                      <tr key={`req-${index}`} className="hover:bg-slate-50">
+                      <tr key={`req-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                         <td className="p-2.5">
-                          <div className="font-semibold text-slate-800">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">
                             {req.style}
                           </div>
                         </td>
-                        <td className="p-2.5 font-bold text-indigo-700">
+                        <td className="p-2.5 font-bold text-indigo-700 dark:text-indigo-400">
                           {req.jenisMesin}
                         </td>
-                        <td className="p-2.5 text-right font-bold text-slate-900 text-sm">
+                        <td className="p-2.5 text-right font-bold text-slate-900 dark:text-slate-100 text-sm">
                           {req.kebutuhanTotal}
                         </td>
-                        <td className="p-2.5 text-right text-slate-700">
+                        <td className="p-2.5 text-right text-slate-700 dark:text-slate-300">
                           {req.kebutuhanLayout}
                         </td>
-                        <td className="p-2.5 text-right text-slate-700">
+                        <td className="p-2.5 text-right text-slate-700 dark:text-slate-300">
                           {req.kebutuhanSpare}
                         </td>
                       </tr>
@@ -539,35 +531,35 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div>
-                  <span className="text-xs font-semibold text-slate-800 block">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 block">
                     Available Machine Inventory
                   </span>
-                  <span className="text-xs text-slate-500"></span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400"></span>
                 </div>
               </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto flex flex-col">
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden overflow-x-auto flex flex-col transition-colors">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-100 text-slate-600 uppercase">
+                    <tr className="bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 uppercase">
                       <th className="p-3">Jenis Mesin</th>
                       <th className="p-3 text-right">
                         Jumlah Mesin (Pringapus)
                       </th>
                       <th className="p-3 text-right">Pinjam (Internal)</th>
                       <th className="p-3 text-right">Sewa</th>
-                      <th className="p-3 text-right text-indigo-700">
+                      <th className="p-3 text-right text-indigo-700 dark:text-indigo-400">
                         Total Mesin
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200">
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {paginatedAvailabilities.map((item) => (
-                      <tr key={item.jenisMesin} className="hover:bg-slate-50">
-                        <td className="p-3 font-bold text-slate-800 text-sm">
+                      <tr key={item.jenisMesin} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="p-3 font-bold text-slate-800 dark:text-slate-200 text-sm">
                           {item.jenisMesin}
                         </td>
-                        <td className="p-3 text-right font-medium text-slate-600">
+                        <td className="p-3 text-right font-medium text-slate-600 dark:text-slate-300">
                           {item.baseCount ?? 0}
                         </td>
                         <td className="p-3 text-right">
@@ -582,7 +574,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                                 Number(e.target.value) || 0,
                               )
                             }
-                            className="w-16 text-right bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm text-slate-900 focus:outline-none focus:border-indigo-600 shadow-sm"
+                            className="w-16 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 shadow-sm transition-colors"
                           />
                         </td>
                         <td className="p-3 text-right">
@@ -597,10 +589,10 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                                 Number(e.target.value) || 0,
                               )
                             }
-                            className="w-16 text-right bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm text-slate-900 focus:outline-none focus:border-indigo-600 shadow-sm"
+                            className="w-16 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 shadow-sm transition-colors"
                           />
                         </td>
-                        <td className="p-3 text-right font-bold text-indigo-700 text-base">
+                        <td className="p-3 text-right font-bold text-indigo-700 dark:text-indigo-400 text-base">
                           {item.jumlahMesin}
                         </td>
                       </tr>
@@ -618,7 +610,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-200 flex justify-end">
+        <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 flex justify-end transition-colors">
           <button
             onClick={onClose}
             className="px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"

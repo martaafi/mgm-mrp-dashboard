@@ -92,6 +92,33 @@ export default function App() {
     "summary",
   );
 
+  // 5. Dark Mode State
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Check local storage or system preference
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      if (saved !== null) {
+        return saved === 'true';
+      }
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  const toggleDarkMode = () => {
+    setIsDarkMode((prev) => !prev);
+  };
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+    }
+  }, [isDarkMode]);
+
   // Filter handlers
   const handleFilterChange = (key: keyof FilterState, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -150,12 +177,72 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-        <div className="flex flex-col items-center">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="mt-4 text-indigo-900 font-medium">
-            Fetching live data from Google Sheets...
-          </p>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col font-sans transition-colors">
+        {/* Header Skeleton */}
+        <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-[68px] w-full flex items-center justify-between px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center space-x-3 animate-pulse">
+            <div className="w-12 h-8 rounded-lg bg-slate-200 dark:bg-slate-700"></div>
+            <div className="w-48 h-5 rounded bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+          </div>
+          <div className="hidden sm:flex items-center space-x-2 animate-pulse">
+            <div className="w-24 h-8 rounded-lg bg-slate-200 dark:bg-slate-700"></div>
+            <div className="w-24 h-8 rounded-lg bg-slate-200 dark:bg-slate-700"></div>
+            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+          </div>
+        </div>
+
+        {/* Main Content Skeleton */}
+        <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-4 animate-pulse">
+          {/* Tabs Skeleton */}
+          <div className="border-b border-slate-200 dark:border-slate-800 pb-2">
+            <div className="flex space-x-1 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg">
+              <div className="flex-1 h-10 bg-slate-200 dark:bg-slate-700/50 rounded-md"></div>
+              <div className="flex-1 h-10 bg-slate-200 dark:bg-slate-700/50 rounded-md"></div>
+              <div className="flex-1 h-10 bg-slate-200 dark:bg-slate-700/50 rounded-md"></div>
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-0 flex flex-col gap-4">
+            {/* Filter Bar Skeleton */}
+            <div className="h-[76px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 flex items-center gap-4">
+               <div className="w-32 h-5 bg-slate-200 dark:bg-slate-700 rounded"></div>
+               <div className="flex-1 flex gap-2">
+                 <div className="w-32 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+                 <div className="w-32 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+               </div>
+            </div>
+
+            {/* KPI Cards Skeleton */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="h-32 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 flex flex-col justify-between">
+                   <div className="flex justify-between items-center">
+                     <div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                     <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+                   </div>
+                   <div className="w-16 h-8 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Table Skeleton */}
+            <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5">
+               <div className="flex justify-between items-center mb-6">
+                 <div>
+                   <div className="w-48 h-5 bg-slate-200 dark:bg-slate-700 rounded mb-2"></div>
+                   <div className="w-32 h-3 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                 </div>
+                 <div className="w-64 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg hidden sm:block"></div>
+               </div>
+               
+               <div className="space-y-3">
+                 <div className="w-full h-8 bg-slate-100 dark:bg-slate-800/80 rounded"></div>
+                 {[1, 2, 3, 4, 5, 6].map(i => (
+                   <div key={i} className="w-full h-12 bg-slate-50 dark:bg-slate-800/40 rounded"></div>
+                 ))}
+               </div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -163,8 +250,8 @@ export default function App() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-sans">
-        <div className="bg-red-50 text-red-700 p-6 rounded-xl border border-red-200 max-w-lg shadow-sm">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center font-sans transition-colors">
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-6 rounded-xl border border-red-200 dark:border-red-800/50 max-w-lg shadow-sm">
           <h2 className="text-lg font-bold mb-2">Error Loading Data</h2>
           <p className="text-sm opacity-90">{error}</p>
           <button
@@ -179,30 +266,30 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       {/* Top Application Header */}
       <Header
         onOpenDataManager={() => setIsDataManagerOpen(true)}
         onOpenReportModal={() => setIsReportModalOpen(true)}
-        onExportExcel={() =>
-          exportMRPToExcel(summaryData, lineMatrix)
-        }
+        onExportExcel={() => exportMRPToExcel(summaryData, lineMatrix)}
         onExportCSV={() => exportSummaryToCSV(summaryData)}
         onRefreshData={handleRefreshData}
         isRefreshing={isRefreshing}
+        isDarkMode={isDarkMode}
+        toggleDarkMode={toggleDarkMode}
       />
 
       {/* Main Container */}
       <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-4">
         {/* Horizontal Tabs Navigation */}
-        <div className="border-b border-slate-200 pb-2">
-          <nav className="flex space-x-1 p-1 bg-slate-100/50 rounded-lg backdrop-blur-sm w-full">
+        <div className="border-b border-slate-200 dark:border-slate-800 pb-2 transition-colors">
+          <nav className="flex space-x-1 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg backdrop-blur-sm w-full transition-colors">
             <button
               onClick={() => setActiveTab("summary")}
               className={`flex-1 px-4 sm:px-6 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
                 activeTab === "summary"
                   ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
               }`}
             >
               Summary
@@ -212,7 +299,7 @@ export default function App() {
               className={`flex-1 px-4 sm:px-6 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
                 activeTab === "detail"
                   ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
               }`}
             >
               Detail Layout
@@ -222,7 +309,7 @@ export default function App() {
               className={`flex-1 px-4 sm:px-6 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
                 activeTab === "history"
                   ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
               }`}
             >
               History
@@ -280,17 +367,17 @@ export default function App() {
       </div>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-5 mt-12 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-5 mt-12 shadow-sm transition-colors">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <div>
-            <span className="font-bold text-slate-800">
+            <span className="font-bold text-slate-800 dark:text-slate-200">
               Garment Sewing Machine Requirement Planning (MRP) Dashboard
             </span>{" "}
           </div>
           <div className="flex items-center space-x-4">
             <button
               onClick={() => setIsDataManagerOpen(true)}
-              className="text-indigo-600 hover:text-indigo-700 font-medium hover:underline"
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium hover:underline"
             >
               Google Sheets Source Sync
             </button>

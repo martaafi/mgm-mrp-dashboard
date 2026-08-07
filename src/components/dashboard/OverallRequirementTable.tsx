@@ -57,23 +57,23 @@ export const OverallRequirementTable: React.FC<
     switch (status) {
       case "Shortage":
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600 mr-1" />
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/50">
+            <AlertTriangle className="w-3.5 h-3.5 text-red-600 dark:text-red-500 mr-1" />
             <span>Shortage</span>
           </span>
         );
       case "Balanced":
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 mr-1" />
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-500 mr-1" />
             <span>Balanced</span>
           </span>
         );
       case "Available":
       default:
         return (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mr-1" />
+          <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-500 mr-1" />
             <span>Available</span>
           </span>
         );
@@ -81,17 +81,17 @@ export const OverallRequirementTable: React.FC<
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden transition-colors">
       {/* Table Header / Toolbar */}
-      <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 transition-colors">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center space-x-2">
+          <h2 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-2">
             <span>Overall Machine Requirement</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-normal">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-normal">
               {filteredAndSortedData.length} Type(s)
             </span>
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">Kebutuhan mesin maksimum pada rentang waktu dipilih</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Kebutuhan mesin maksimum pada rentang waktu dipilih</p>
         </div>
 
         {/* Search Input */}
@@ -102,7 +102,7 @@ export const OverallRequirementTable: React.FC<
             placeholder="Search machine code/name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+            className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-800 transition-colors"
           />
         </div>
       </div>
@@ -111,11 +111,11 @@ export const OverallRequirementTable: React.FC<
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold tracking-widest text-slate-500">
+            <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold tracking-widest text-slate-500 dark:text-slate-400 transition-colors">
               <th className="py-3 px-4 sm:px-6">
                 <button
                   onClick={() => handleSort("machine")}
-                  className="flex items-center space-x-1 hover:text-slate-900 transition-colors"
+                  className="flex items-center space-x-1 hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
                 >
                   <span>Machine</span>
                   {sortField === "machine" ? (
@@ -202,7 +202,7 @@ export const OverallRequirementTable: React.FC<
               <th className="py-3 px-4 text-right">Drill Down</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 text-xs sm:text-sm">
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-xs sm:text-sm">
             {filteredAndSortedData.map((item) => {
               // Utilization color rules:
               // Hijau = <80%, Kuning = 80–95%, Merah = >95%
@@ -220,16 +220,16 @@ export const OverallRequirementTable: React.FC<
                 <tr
                   key={item.machine}
                   onClick={() => onSelectMachine(item.machine)}
-                  className="hover:bg-slate-50 cursor-pointer transition-colors group"
+                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
                 >
                   <td className="py-3.5 px-4 sm:px-6">
                     <div>
-                      <div className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                      <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         {item.machine}
                       </div>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 text-center font-bold text-slate-800">
+                  <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
                     {item.required}
                   </td>
                   <td className="py-3.5 px-4 text-center">
@@ -248,7 +248,7 @@ export const OverallRequirementTable: React.FC<
                           )}
                         </div>
                       )}
-                      <span className="text-slate-700 font-medium text-base">
+                      <span className="text-slate-700 dark:text-slate-300 font-medium text-base">
                         {item.baseCount ?? 0}
                       </span>
                     </div>
@@ -257,10 +257,10 @@ export const OverallRequirementTable: React.FC<
                     <span
                       className={`px-2 py-0.5 rounded-md ${
                         item.gap < 0
-                          ? "bg-red-50 text-red-700 border border-red-200"
+                          ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/50"
                           : item.gap === 0
-                            ? "bg-slate-100 text-slate-600 border border-slate-200"
-                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                            : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
                       }`}
                     >
                       {item.gap > 0 ? `+${item.gap}` : item.gap}
@@ -271,7 +271,7 @@ export const OverallRequirementTable: React.FC<
                   </td>
                   <td className="py-3.5 px-4 sm:px-6">
                     <div className="flex items-center space-x-3">
-                      <div className="w-24 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                      <div className="w-24 bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-200 dark:border-slate-700">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${barColor}`}
                           style={{
@@ -284,7 +284,7 @@ export const OverallRequirementTable: React.FC<
                       </span>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 text-center text-slate-700 font-semibold">
+                  <td className="py-3.5 px-4 text-center text-slate-700 dark:text-slate-300 font-semibold">
                     {item.linesCount}
                   </td>
                   <td className="py-3.5 px-4 text-right">
@@ -293,7 +293,7 @@ export const OverallRequirementTable: React.FC<
                         e.stopPropagation();
                         onSelectMachine(item.machine);
                       }}
-                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+                      className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 border border-indigo-200 dark:border-indigo-800/50 transition-colors"
                       title="Drill down line usage details"
                     >
                       <span>Detail</span>
@@ -308,7 +308,7 @@ export const OverallRequirementTable: React.FC<
               <tr>
                 <td
                   colSpan={8}
-                  className="py-8 text-center text-slate-500 text-sm"
+                  className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm"
                 >
                   No machines matching current filter criteria.
                 </td>

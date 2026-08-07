@@ -1,5 +1,6 @@
 import React from "react";
 import { Wrench, PackageCheck, AlertTriangle } from "lucide-react";
+import { format } from "date-fns";
 import { MachineRequirementSummary } from "../../types/mrp";
 
 interface KPICardsProps {
@@ -24,13 +25,13 @@ export const KPICards: React.FC<KPICardsProps> = ({
   const totalGap = totalAvailable - totalRequired;
 
   const formattedDate = availabilityDate
-    ? availabilityDate.split("-").reverse().join("/")
+    ? format(new Date(availabilityDate), "dd MMM yyyy")
     : "-";
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
       {/* 1. Total Available Machine */}
-      <div className="bg-blue-600 border border-blue-700 rounded-xl p-4 shadow-sm flex flex-col hover:brightness-105 transition-all text-white">
+      <div className="bg-blue-600 dark:bg-blue-900 border border-blue-700 dark:border-blue-800 rounded-xl p-4 shadow-sm flex flex-col hover:brightness-105 transition-all text-white">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-blue-100">
             Available Machine
@@ -50,7 +51,7 @@ export const KPICards: React.FC<KPICardsProps> = ({
       </div>
 
       {/* 2. Total Machine Required */}
-      <div className="bg-amber-500 border border-amber-600 rounded-xl p-4 shadow-sm flex flex-col hover:brightness-105 transition-all text-white">
+      <div className="bg-amber-500 dark:bg-amber-700 border border-amber-600 dark:border-amber-800 rounded-xl p-4 shadow-sm flex flex-col hover:brightness-105 transition-all text-white">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-amber-100">
             Requirement Mesin
@@ -71,7 +72,7 @@ export const KPICards: React.FC<KPICardsProps> = ({
 
       {/* 3. GAP */}
       <div
-        className={`border rounded-xl p-4 shadow-sm flex flex-col hover:brightness-105 transition-all text-white ${totalGap < 0 ? "bg-red-500 border-red-600" : "bg-emerald-500 border-emerald-600"}`}
+        className={`border rounded-xl p-4 shadow-sm flex flex-col hover:brightness-105 transition-all text-white ${totalGap < 0 ? "bg-red-500 dark:bg-red-900 border-red-600 dark:border-red-800" : "bg-emerald-500 dark:bg-emerald-900 border-emerald-600 dark:border-emerald-800"}`}
       >
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-white/80">
