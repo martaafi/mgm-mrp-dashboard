@@ -185,7 +185,7 @@ export default function App() {
         onOpenDataManager={() => setIsDataManagerOpen(true)}
         onOpenReportModal={() => setIsReportModalOpen(true)}
         onExportExcel={() =>
-          exportMRPToExcel(summaryData, lineMatrix, filterSummaryLabel)
+          exportMRPToExcel(summaryData, lineMatrix)
         }
         onExportCSV={() => exportSummaryToCSV(summaryData)}
         onRefreshData={handleRefreshData}

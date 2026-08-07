@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Printer, FileText, Download, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, Printer, FileText } from 'lucide-react';
 import { MachineRequirementSummary, LineMachineMatrixRow } from '../../types/mrp';
 
 interface PrintableReportModalProps {

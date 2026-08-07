@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Send, Bot, User, Wrench, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { X, Sparkles, Send, Bot, User } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { MachineRequirementSummary, LineMachineMatrixRow } from '../../types/mrp';
 

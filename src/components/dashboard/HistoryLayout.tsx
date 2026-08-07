@@ -124,8 +124,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     return [...rawChangedPlans].sort((a, b) => {
       const aRed = planMacroImpactMap.get(a) || false;
       const bRed = planMacroImpactMap.get(b) || false;
-      const aYellow = a.isStyleChanged;
-      const bYellow = b.isStyleChanged;
+      const aYellow = !!a.isStyleChanged;
+      const bYellow = !!b.isStyleChanged;
 
       const getPriority = (isRed: boolean, isYellow: boolean) => {
         if (isRed) return 1;

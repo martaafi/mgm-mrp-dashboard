@@ -3,8 +3,7 @@ import { MachineRequirementSummary, LineMachineMatrixRow } from '../types/mrp';
 
 export const exportMRPToExcel = (
   summaryData: MachineRequirementSummary[],
-  lineMatrix: LineMachineMatrixRow[],
-  filterLabel: string = 'Current Filter'
+  lineMatrix: LineMachineMatrixRow[]
 ) => {
   // 1. Prepare Summary Sheet
   const summarySheetData = summaryData.map((item) => ({
