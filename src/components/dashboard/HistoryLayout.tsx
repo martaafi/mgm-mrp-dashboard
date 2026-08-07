@@ -51,28 +51,27 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return filteredPlans
-      .filter((p) => {
-        if (!p.isStyleChanged && !p.isDisplayStyleChanged) return false;
+    return filteredPlans.filter((p) => {
+      if (!p.isStyleChanged && !p.isDisplayStyleChanged) return false;
 
-        // Filter: Tampilkan mulai dari hari ini dan masa depan
-        const planDate = new Date(p.date);
-        planDate.setHours(0, 0, 0, 0);
-        return planDate >= today;
-      });
+      // Filter: Tampilkan mulai dari hari ini dan masa depan
+      const planDate = new Date(p.date);
+      planDate.setHours(0, 0, 0, 0);
+      return planDate >= today;
+    });
   }, [filteredPlans]);
 
   // Pre-calculate macro impact warning for ALL raw changed plans
   const planMacroImpactMap = useMemo(() => {
     const map = new Map<ProductionPlan, boolean>();
     const todayStr = getTodayStr();
-    
-    rawChangedPlans.forEach(plan => {
+
+    rawChangedPlans.forEach((plan) => {
       if (!plan.isStyleChanged) {
         map.set(plan, false);
         return;
       }
-      
+
       const impactPlans = filteredPlans.filter(
         (p) => p.date >= todayStr && p.date <= plan.date,
       );
@@ -82,7 +81,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         return;
       }
 
-      const currentFactoryReqs = calculateMachineRequirements(impactPlans, requirements, availabilities);
+      const currentFactoryReqs = calculateMachineRequirements(
+        impactPlans,
+        requirements,
+        availabilities,
+      );
 
       const hypotheticalPlans = impactPlans.map((p) => {
         if (p.isStyleChanged && p.historyStyle) {
@@ -91,7 +94,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         return p;
       });
 
-      const hypotheticalFactoryReqs = calculateMachineRequirements(hypotheticalPlans, requirements, availabilities);
+      const hypotheticalFactoryReqs = calculateMachineRequirements(
+        hypotheticalPlans,
+        requirements,
+        availabilities,
+      );
 
       let hasNewShortage = false;
       const allMachineTypes = new Set([
@@ -101,21 +108,26 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
       for (const machine of Array.from(allMachineTypes)) {
         const current = currentFactoryReqs.find((r) => r.machine === machine);
-        const hypothetical = hypotheticalFactoryReqs.find((r) => r.machine === machine);
+        const hypothetical = hypotheticalFactoryReqs.find(
+          (r) => r.machine === machine,
+        );
 
-        const available = availabilities.find((a) => a.jenisMesin.toLowerCase() === machine.toLowerCase())?.jumlahMesin || 0;
+        const available =
+          availabilities.find(
+            (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
+          )?.jumlahMesin || 0;
         const oldGap = hypothetical ? hypothetical.gap : available;
         const newGap = current ? current.gap : available;
 
         if (newGap < 0 && oldGap >= 0) hasNewShortage = true;
         if (newGap < 0 && oldGap < 0 && newGap < oldGap) hasNewShortage = true;
-        
+
         if (hasNewShortage) break;
       }
 
       map.set(plan, hasNewShortage);
     });
-    
+
     return map;
   }, [rawChangedPlans, filteredPlans, requirements, availabilities]);
 
@@ -372,7 +384,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                   onClick={() => setSelectedPlan(plan)}
                   className={`p-4 rounded-xl cursor-pointer transition-all ${
                     isSelected
-                      ? isWarning 
+                      ? isWarning
                         ? "bg-red-500 border-2 border-white text-white shadow-lg shadow-red-500/40 ring-2 ring-red-500 animate-pulse"
                         : "bg-indigo-50 border border-indigo-300 shadow-sm ring-1 ring-indigo-300"
                       : isWarning
@@ -382,10 +394,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                 >
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center space-x-2">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${isWarning ? 'bg-white/20 text-white' : 'bg-slate-800 text-white'}`}>
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded-md ${isWarning ? "bg-white/20 text-white" : "bg-slate-800 text-white"}`}
+                      >
                         {plan.line}
                       </span>
-                      <span className={`text-xs font-medium flex items-center ${isWarning ? 'text-red-100' : 'text-slate-500'}`}>
+                      <span
+                        className={`text-xs font-medium flex items-center ${isWarning ? "text-red-100" : "text-slate-500"}`}
+                      >
                         <Calendar className="w-3 h-3 mr-1" />
                         {formatDate(plan.date)}
                       </span>
@@ -402,24 +418,32 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                   </div>
 
                   <div className="space-y-1">
-                    <div className={`text-xs line-through ${isWarning ? 'text-red-200' : 'text-slate-500'}`}>
+                    <div
+                      className={`text-xs line-through ${isWarning ? "text-red-200" : "text-slate-500"}`}
+                    >
                       {plan.historyDisplayStyle ||
                         plan.historyStyle ||
                         "Kosong"}
                     </div>
-                    <div className={`flex items-center text-sm font-bold ${isWarning ? 'text-white' : 'text-slate-800'}`}>
-                      <ArrowRight className={`w-3 h-3 mr-1.5 ${isWarning ? 'text-red-200' : 'text-emerald-500'}`} />
+                    <div
+                      className={`flex items-center text-sm font-bold ${isWarning ? "text-white" : "text-slate-800"}`}
+                    >
+                      <ArrowRight
+                        className={`w-3 h-3 mr-1.5 ${isWarning ? "text-red-200" : "text-emerald-500"}`}
+                      />
                       {plan.displayStyle || plan.style || "Kosong"}
                     </div>
                   </div>
 
-                  <div className={`mt-3 text-[10px] flex items-center justify-between ${isWarning ? 'text-red-100' : 'text-slate-400'}`}>
+                  <div
+                    className={`mt-3 text-[10px] flex items-center justify-between ${isWarning ? "text-red-100" : "text-slate-400"}`}
+                  >
                     <span>
                       Terjadi perubahan planning setelah tanggal:{" "}
                       {plan.snapshotDate || "Unknown"}
                     </span>
                     <ChevronRight
-                      className={`w-4 h-4 ${isSelected ? (isWarning ? "text-white" : "text-indigo-500") : (isWarning ? "text-red-200" : "text-slate-300")}`}
+                      className={`w-4 h-4 ${isSelected ? (isWarning ? "text-white" : "text-indigo-500") : isWarning ? "text-red-200" : "text-slate-300"}`}
                     />
                   </div>
                 </div>
@@ -461,17 +485,18 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
               <div>
                 <h3 className="text-lg font-bold text-slate-800 flex items-center">
                   <Activity className="w-5 h-5 mr-2 text-indigo-500" />
-                  Dampak Makro Terhadap Kapasitas Pabrik
+                  Dampak Terhadap Kebutuhan Mesin
                 </h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  Agregasi dampak dari{" "}
-                  <strong>
-                    {factoryImpact.totalStyleChanges} perubahan planning
-                  </strong>{" "}
-                  selama rentang waktu:
-                  <span className="font-semibold text-slate-700 ml-1">
-                    {factoryImpact.startDate} s/d {factoryImpact.endDate}
+                <p className="text-sm text-slate-500 mt-1 leading-relaxed">
+                  Dampak perubahan planning PPIC pada rentang waktu
+                  <span className="font-semibold text-slate-700 mx-1">
+                    {formatDate(factoryImpact.startDate)}
                   </span>
+                  hingga
+                  <span className="font-semibold text-slate-700 mx-1">
+                    {formatDate(factoryImpact.endDate)}
+                  </span>
+                  terhadap total kebutuhan mesin pabrik.
                 </p>
               </div>
 
@@ -480,11 +505,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                   <AlertCircle className="w-5 h-5 text-red-500 mr-2 shrink-0" />
                   <div>
                     <h4 className="text-xs font-bold text-red-800">
-                      Peringatan Kritis: Terjadi Shortage Pabrik!
+                      Peringatan!
                     </h4>
                     <p className="text-[11px] text-red-600">
-                      Perubahan style pada rentang waktu ini menyebabkan
-                      shortage mesin.
+                      Perubahan style pada rentang waktu ini menambah shortage
+                      mesin.
                     </p>
                   </div>
                 </div>
@@ -528,7 +553,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                       statusClass = "text-red-600 font-bold";
                     } else if (row.isWorseShortage) {
                       rowClass = "bg-white";
-                      statusText = "Makin Shortage";
+                      statusText = "Shortage Bertambah";
                       statusClass = "text-red-600 font-bold";
                     } else if (row.newGap < 0) {
                       statusText = "Shortage (Tetap)";
@@ -561,7 +586,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           {row.newGap}
                         </td>
                         <td className="px-4 py-4 text-center border-l border-slate-100 align-middle">
-                          <div className={`text-xs text-center leading-tight mx-auto ${statusClass}`}>
+                          <div
+                            className={`text-xs text-center leading-tight mx-auto ${statusClass}`}
+                          >
                             {statusText}
                           </div>
                         </td>
@@ -579,11 +606,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
             <h2 className="font-bold text-slate-800 flex items-center">
               <Activity className="w-5 h-5 mr-2 text-emerald-500" />
-              Analisis Dampak Perubahan
+              Detail Perubahan Kebutuhan Mesin
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Menganalisis apakah perubahan style menyebabkan lonjakan kebutuhan
-              mesin yang tidak terduga.
+              Menganalisis apakah perubahan planning style menyebabkan lonjakan
+              kebutuhan mesin yang signifikan
             </p>
           </div>
 
@@ -656,14 +683,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                 ) : (
                   <div className="space-y-4">
                     {impactAnalysis.hasCriticalImpact && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start shadow-sm">
-                        <AlertTriangle className="w-6 h-6 text-amber-500 mr-3 shrink-0 mt-0.5" />
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center shadow-sm">
+                        <AlertTriangle className="w-6 h-6 text-amber-500 mr-4 shrink-0" />
                         <div>
                           <h4 className="text-sm font-bold text-amber-800 mb-1">
                             Peringatan: Kebutuhan Mesin Melonjak!
                           </h4>
                           <p className="text-xs text-amber-700 leading-relaxed">
-                            Perubahan style ini menuntut{" "}
+                            Perubahan style ini membutuhkan{" "}
                             <strong>
                               mesin baru yang sebelumnya tidak disiapkan
                             </strong>{" "}
@@ -706,7 +733,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                             } else if (row.isIncreased) {
                               rowClass = "bg-amber-50";
                               diffClass = "text-amber-600 font-bold";
-                              diffText = `+${row.diff} (Nambah)`;
+                              diffText = `+${row.diff} (Bertambah)`;
                             } else if (row.isDecreased) {
                               rowClass = "bg-emerald-50";
                               diffClass = "text-emerald-600 font-medium";
