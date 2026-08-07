@@ -1,5 +1,5 @@
 import React from 'react';
-import { Filter, RotateCcw, Calendar } from 'lucide-react';
+import { Filter, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { FilterState } from '../../types/mrp';
 import { DateRangePicker } from './DateRangePicker';

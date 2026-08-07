@@ -140,11 +140,11 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         }
         
         if (isSelectedStart) {
-          wrapperClasses += tempEnd && !isSameDay(tempStart, tempEnd) ? "bg-slate-200 rounded-l-md " : "";
+          wrapperClasses += tempStart && tempEnd && !isSameDay(tempStart, tempEnd) ? "bg-slate-200 rounded-l-md " : "";
           cellClasses = "flex items-center justify-center h-7 w-full text-xs font-bold cursor-pointer relative z-10 bg-slate-800 text-white rounded-md shadow-sm";
         }
         
-        if (isSelectedEnd && tempStart && !isSameDay(tempStart, tempEnd)) {
+        if (isSelectedEnd && tempStart && tempEnd && !isSameDay(tempStart, tempEnd)) {
           wrapperClasses += tempStart ? "bg-slate-200 rounded-r-md " : "";
           cellClasses = "flex items-center justify-center h-7 w-full text-xs font-bold cursor-pointer relative z-10 bg-slate-800 text-white rounded-md shadow-sm";
         }
