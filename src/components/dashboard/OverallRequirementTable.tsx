@@ -131,11 +131,11 @@ export const OverallRequirementTable: React.FC<
               </th>
               <th className="py-3 px-4 text-center">
                 <button
-                  onClick={() => handleSort("required")}
+                  onClick={() => handleSort("available")}
                   className="flex items-center justify-center space-x-1 mx-auto hover:text-slate-900 transition-colors"
                 >
-                  <span>Required</span>
-                  {sortField === "required" ? (
+                  <span>Available</span>
+                  {sortField === "available" ? (
                     sortOrder === "asc" ? (
                       <ArrowUp className="w-3 h-3 text-indigo-600" />
                     ) : (
@@ -146,13 +146,16 @@ export const OverallRequirementTable: React.FC<
                   )}
                 </button>
               </th>
+              <th className="py-3 px-4 text-center text-slate-500 dark:text-slate-400 font-bold tracking-widest uppercase">
+                Detail Ketersediaan
+              </th>
               <th className="py-3 px-4 text-center">
                 <button
-                  onClick={() => handleSort("available")}
+                  onClick={() => handleSort("required")}
                   className="flex items-center justify-center space-x-1 mx-auto hover:text-slate-900 transition-colors"
                 >
-                  <span>Available</span>
-                  {sortField === "available" ? (
+                  <span>Required</span>
+                  {sortField === "required" ? (
                     sortOrder === "asc" ? (
                       <ArrowUp className="w-3 h-3 text-indigo-600" />
                     ) : (
@@ -229,29 +232,28 @@ export const OverallRequirementTable: React.FC<
                       </div>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
-                    {item.required}
+                  <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200 text-base">
+                    {(item.baseCount ?? 0) + (item.pinjamCount || 0) + (item.sewaCount || 0)}
                   </td>
                   <td className="py-3.5 px-4 text-center">
-                    <div className="flex flex-col items-center justify-center">
-                      {((item.pinjamCount || 0) > 0 || (item.sewaCount || 0) > 0) && (
-                        <div className="flex space-x-1 mb-1 z-10">
-                          {(item.pinjamCount || 0) > 0 && (
-                            <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[9px] font-bold text-white bg-red-500 rounded-full shadow-sm leading-none">
-                              +{item.pinjamCount} pinjam
-                            </span>
-                          )}
-                          {(item.sewaCount || 0) > 0 && (
-                            <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-[9px] font-bold text-white bg-amber-500 rounded-full shadow-sm leading-none">
-                              +{item.sewaCount} sewa
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <span className="text-slate-700 dark:text-slate-300 font-medium text-base">
-                        {item.baseCount ?? 0}
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-slate-500 rounded-full shadow-sm leading-none w-max">
+                        {item.baseCount ?? 0} pringapus
                       </span>
+                      {(item.pinjamCount || 0) > 0 && (
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-red-500 rounded-full shadow-sm leading-none w-max">
+                          +{item.pinjamCount} pinjam
+                        </span>
+                      )}
+                      {(item.sewaCount || 0) > 0 && (
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-amber-500 rounded-full shadow-sm leading-none w-max">
+                          +{item.sewaCount} sewa
+                        </span>
+                      )}
                     </div>
+                  </td>
+                  <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
+                    {item.required}
                   </td>
                   <td className="py-3.5 px-4 text-right font-bold">
                     <span
@@ -307,7 +309,7 @@ export const OverallRequirementTable: React.FC<
             {filteredAndSortedData.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="py-8 text-center text-slate-500 dark:text-slate-400 text-sm"
                 >
                   No machines matching current filter criteria.

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { format, isSameMonth, addMonths, subMonths, isWithinInterval, isSameDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays } from "date-fns";
+import { format, isSameMonth, addMonths, subMonths, isWithinInterval, isSameDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, getISOWeek } from "date-fns";
 import { enUS } from "date-fns/locale";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -87,7 +87,10 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   const renderDays = () => {
     const days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
     return (
-      <div className="grid grid-cols-7 gap-0 pt-2 pb-1.5 px-2 border-b border-slate-100">
+      <div className="grid grid-cols-8 gap-0 pt-2 pb-1.5 px-2 border-b border-slate-100">
+        <div className="text-center text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+          Wk
+        </div>
         {days.map((day, idx) => (
           <div
             key={idx}
@@ -113,7 +116,26 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     let day = startDateRange;
     let formattedDate = "";
 
+    const handleWeekClick = (weekStartDay: Date) => {
+      setTempStart(weekStartDay);
+      setTempEnd(endOfWeek(weekStartDay, { weekStartsOn: 1 }));
+    };
+
     while (day <= endDateRange) {
+      const weekStartDay = new Date(day);
+      const isoWeekNum = getISOWeek(weekStartDay);
+      
+      const weekCell = (
+        <div
+          key={`week-${isoWeekNum}`}
+          className="flex items-center justify-center h-7 text-[10px] font-bold text-indigo-500 cursor-pointer hover:bg-indigo-50 rounded"
+          onClick={() => handleWeekClick(weekStartDay)}
+          title="Select whole week"
+        >
+          W{isoWeekNum}
+        </div>
+      );
+
       for (let i = 0; i < 7; i++) {
         formattedDate = format(day, dateFormat);
         const cloneDay = new Date(day);
@@ -135,8 +157,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         
         // Range backgrounds
         if (isInRange && !isSelectedStart && !isSelectedEnd) {
-           wrapperClasses += "bg-slate-200 dark:bg-slate-700 "; // Neutral background
-           cellClasses = cellClasses.replace("hover:bg-slate-100", "hover:bg-slate-300 dark:hover:bg-slate-600");
+           wrapperClasses += "bg-slate-200 "; // Neutral background
+           cellClasses = cellClasses.replace("hover:bg-slate-100", "hover:bg-slate-300");
         }
         
         if (isSelectedStart) {
@@ -159,7 +181,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         day = addDays(day, 1);
       }
       rows.push(
-        <div className="grid grid-cols-7 gap-0 px-2 mt-1" key={day.toString()}>
+        <div className="grid grid-cols-8 gap-0 px-2 mt-1" key={day.toString()}>
+          {weekCell}
           {days}
         </div>
       );
@@ -198,7 +221,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
       {/* Popover Calendar */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-slate-200 z-50 w-[260px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute top-full left-0 mt-2 bg-white rounded-lg shadow-xl border border-slate-200 z-50 w-[290px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {renderHeader()}
           {renderDays()}
           {renderCells()}
