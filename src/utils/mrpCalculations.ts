@@ -9,6 +9,9 @@ import {
   DrillDownLineDetail,
   HeatmapCell,
   GapStatus,
+  TrendDataPoint,
+  ShortageStyleData,
+  ShortageMachineData,
 } from '../types/mrp';
 
 export const filterProductionPlans = (
@@ -37,11 +40,16 @@ export const calculateMachineRequirements = (
 ): MachineRequirementSummary[] => {
   // 1. Determine final style for each (date, line)
   const finalStylePerDateLine: Record<string, string> = {}; // key: "YYYY-MM-DD|Line", value: style
+  const linesPerDate: Record<string, string[]> = {};
   
   plans.forEach(plan => {
     const key = `${plan.date}|${plan.line}`;
     // Overwrites previous styles for the same date and line, keeping only the last one
     finalStylePerDateLine[key] = plan.style;
+    if (!linesPerDate[plan.date]) linesPerDate[plan.date] = [];
+    if (!linesPerDate[plan.date].includes(plan.line)) {
+      linesPerDate[plan.date].push(plan.line);
+    }
   });
 
   // Map of machine -> date -> required count
@@ -57,6 +65,8 @@ export const calculateMachineRequirements = (
 
   Object.entries(finalStylePerDateLine).forEach(([key, style]) => {
     const [date, line] = key.split('|');
+
+    if (line.toUpperCase() === 'ACC') return;
 
     // Find requirements for this style using dictionary (O(1))
     const styleReqs = reqsByStyle[style] || [];
@@ -78,6 +88,36 @@ export const calculateMachineRequirements = (
       }
       linesUsingMachine[machineType].add(line);
     });
+  });
+
+  // Calculate ACC requirements
+  Object.keys(linesPerDate).forEach(date => {
+    const lines = linesPerDate[date];
+    const hasACC = lines.some(l => l.toUpperCase() === 'ACC');
+    
+    if (hasACC) {
+      lines.forEach(otherLine => {
+        if (otherLine.toUpperCase() !== 'ACC') {
+          const otherStyle = finalStylePerDateLine[`${date}|${otherLine}`];
+          const otherReqs = reqsByStyle[otherStyle] || [];
+          otherReqs.forEach(req => {
+            if (req.kebutuhanAccessories && req.kebutuhanAccessories > 0) {
+              const machineType = req.jenisMesin.trim();
+              if (!dateMachineRequiredMap[machineType]) {
+                dateMachineRequiredMap[machineType] = {};
+              }
+              dateMachineRequiredMap[machineType][date] = 
+                (dateMachineRequiredMap[machineType][date] || 0) + req.kebutuhanAccessories;
+                
+              if (!linesUsingMachine[machineType]) {
+                linesUsingMachine[machineType] = new Set();
+              }
+              linesUsingMachine[machineType].add('ACC');
+            }
+          });
+        }
+      });
+    }
   });
 
   // Calculate peak daily requirement per machine type
@@ -169,28 +209,55 @@ export const buildLineMachineMatrix = (
     reqsByStyle[req.style].push(req);
   });
 
-  return Object.values(finalStylePerDateLine).map((plan) => {
-    const styleReqs = reqsByStyle[plan.style] || [];
+  const dates = Array.from(new Set(plans.map(p => p.date)));
+  const result: LineMachineMatrixRow[] = [];
 
-    const machines: Record<string, number> = {};
-    let totalMachines = 0;
+  dates.forEach(date => {
+    const datePlans = plans.filter(p => p.date === date);
+    const finalPlanPerLine: Record<string, ProductionPlan> = {};
+    datePlans.forEach(p => finalPlanPerLine[p.line] = p);
 
-    styleReqs.forEach((req) => {
-      const type = req.jenisMesin.trim();
-      machines[type] = (machines[type] || 0) + req.kebutuhanTotal;
-      totalMachines += req.kebutuhanTotal;
+    Object.values(finalPlanPerLine).forEach(plan => {
+      const isACC = plan.line.toUpperCase() === 'ACC';
+      const machines: Record<string, number> = {};
+      let totalMachines = 0;
+      
+      if (isACC) {
+        Object.values(finalPlanPerLine).forEach(otherPlan => {
+          if (otherPlan.line.toUpperCase() === 'ACC') return;
+          const otherStyleReqs = reqsByStyle[otherPlan.style] || [];
+          otherStyleReqs.forEach(req => {
+            if (req.kebutuhanAccessories && req.kebutuhanAccessories > 0) {
+              const type = req.jenisMesin.trim();
+              machines[type] = (machines[type] || 0) + req.kebutuhanAccessories;
+              totalMachines += req.kebutuhanAccessories;
+            }
+          });
+        });
+      } else {
+        const styleReqs = reqsByStyle[plan.style] || [];
+        styleReqs.forEach((req) => {
+          if (req.kebutuhanTotal > 0) {
+            const type = req.jenisMesin.trim();
+            machines[type] = (machines[type] || 0) + req.kebutuhanTotal;
+            totalMachines += req.kebutuhanTotal;
+          }
+        });
+      }
+
+      result.push({
+        line: plan.line,
+        style: plan.style,
+        kodeStyle: plan.kodeStyle || "",
+        qty: plan.qty || 0,
+        date: plan.date,
+        machines,
+        totalMachines,
+      });
     });
-
-    return {
-      line: plan.line,
-      style: plan.style,
-      kodeStyle: plan.kodeStyle || "",
-      qty: plan.qty || 0,
-      date: plan.date,
-      machines,
-      totalMachines,
-    };
   });
+  
+  return result;
 };
 
 /**
@@ -223,27 +290,38 @@ export const getMachineDrillDown = (
   });
 
   Object.values(finalStylePerDateLine).forEach((plan) => {
-    const styleReqs = reqsByStyle[plan.style] || [];
-    const matchingReqs = styleReqs.filter(
-      (req) => req.jenisMesin.toLowerCase() === machineType.toLowerCase()
-    );
-
-    if (matchingReqs.length > 0) {
-      const lineRequired = matchingReqs.reduce((sum, req) => sum + req.kebutuhanTotal, 0);
-      
-      if (lineRequired > 0) {
-        // Track requirement per date to find peak daily requirement
-        dateRequiredMap[plan.date] = (dateRequiredMap[plan.date] || 0) + lineRequired;
-
-        // Track max usage per line for the drill down details
-        if (!lineDetailsMap[plan.line] || lineRequired > lineDetailsMap[plan.line].required) {
-          lineDetailsMap[plan.line] = {
-            line: plan.line,
-            style: plan.style,
-            required: lineRequired,
-            date: plan.date,
-          };
+    const isACC = plan.line.toUpperCase() === 'ACC';
+    let lineRequired = 0;
+    
+    if (isACC) {
+      const datePlans = Object.values(finalStylePerDateLine).filter(p => p.date === plan.date && p.line.toUpperCase() !== 'ACC');
+      datePlans.forEach(otherPlan => {
+        const otherReqs = reqsByStyle[otherPlan.style] || [];
+        const match = otherReqs.find(r => r.jenisMesin.toLowerCase() === machineType.toLowerCase());
+        if (match && match.kebutuhanAccessories > 0) {
+          lineRequired += match.kebutuhanAccessories;
         }
+      });
+    } else {
+      const styleReqs = reqsByStyle[plan.style] || [];
+      const matchingReqs = styleReqs.filter(
+        (req) => req.jenisMesin.toLowerCase() === machineType.toLowerCase()
+      );
+      if (matchingReqs.length > 0) {
+        lineRequired = matchingReqs.reduce((sum, req) => sum + req.kebutuhanTotal, 0);
+      }
+    }
+
+    if (lineRequired > 0) {
+      dateRequiredMap[plan.date] = (dateRequiredMap[plan.date] || 0) + lineRequired;
+
+      if (!lineDetailsMap[plan.line] || lineRequired > lineDetailsMap[plan.line].required) {
+        lineDetailsMap[plan.line] = {
+          line: plan.line,
+          style: isACC ? "ACC (Combined)" : plan.style,
+          required: lineRequired,
+          date: plan.date,
+        };
       }
     }
   });
@@ -334,3 +412,384 @@ export const generateHeatmapData = (
     cells,
   };
 };
+
+/**
+ * Gets the trend of machine gaps over time, skipping Sundays and specified holidays.
+ */
+export const getGapTrendData = (
+  plans: ProductionPlan[],
+  requirements: MachineRequirementPerStyle[],
+  availabilities: MachineAvailability[],
+  holidays: string[] = ["2026-08-17", "2026-08-25"]
+): TrendDataPoint[] => {
+  if (plans.length === 0) return [];
+
+  // Determine date range from plans
+  const dates = Array.from(new Set(plans.map((p) => p.date))).sort();
+  const minDateStr = dates[0];
+  const maxDateStr = dates[dates.length - 1];
+
+  const startDate = new Date(minDateStr);
+  const endDate = new Date(maxDateStr);
+  
+  const dateRange: string[] = [];
+  const currentDate = new Date(startDate);
+
+  while (currentDate <= endDate) {
+    const dateStr = currentDate.toISOString().split("T")[0];
+    const dayOfWeek = currentDate.getDay(); // 0 is Sunday
+    
+    // Include if it's not Sunday AND not a holiday
+    if (dayOfWeek !== 0 && !holidays.includes(dateStr)) {
+      dateRange.push(dateStr);
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  // Precompute availabilities
+  const maxAvailabilityMap: Record<string, number> = {};
+  availabilities.forEach((avail) => {
+    const type = String(avail.jenisMesin).toLowerCase();
+    maxAvailabilityMap[type] = Math.max(maxAvailabilityMap[type] || 0, avail.jumlahMesin);
+  });
+
+  const totalAvailableAcrossAll = Object.values(maxAvailabilityMap).reduce((a, b) => a + b, 0);
+
+  // Group requirements by date and machine
+  // 1. Determine final style for each (date, line)
+  const finalStylePerDateLine: Record<string, string> = {};
+  plans.forEach(plan => {
+    finalStylePerDateLine[`${plan.date}|${plan.line}`] = plan.style;
+  });
+
+  // 2. Aggregate required machines per date
+  const reqsByStyle: Record<string, MachineRequirementPerStyle[]> = {};
+  requirements.forEach(req => {
+    if (!reqsByStyle[req.style]) reqsByStyle[req.style] = [];
+    reqsByStyle[req.style].push(req);
+  });
+
+  // date -> machine -> requiredCount
+  const dateMachineReqs: Record<string, Record<string, number>> = {};
+  
+  Object.entries(finalStylePerDateLine).forEach(([key, style]) => {
+    const [date, line] = key.split('|');
+    const isACC = line.toUpperCase() === 'ACC';
+    
+    if (!dateMachineReqs[date]) dateMachineReqs[date] = {};
+    
+    if (isACC) {
+      Object.entries(finalStylePerDateLine).forEach(([otherKey, otherStyle]) => {
+        const [otherDate, otherLine] = otherKey.split('|');
+        if (otherDate === date && otherLine.toUpperCase() !== 'ACC') {
+          const otherReqs = reqsByStyle[otherStyle] || [];
+          otherReqs.forEach(req => {
+            if (req.kebutuhanAccessories && req.kebutuhanAccessories > 0) {
+              const mType = String(req.jenisMesin).toLowerCase().trim();
+              dateMachineReqs[date][mType] = (dateMachineReqs[date][mType] || 0) + req.kebutuhanAccessories;
+            }
+          });
+        }
+      });
+    } else {
+      const styleReqs = reqsByStyle[style] || [];
+      styleReqs.forEach(req => {
+        if (req.kebutuhanTotal <= 0) return;
+        const mType = String(req.jenisMesin).toLowerCase().trim();
+        dateMachineReqs[date][mType] = (dateMachineReqs[date][mType] || 0) + req.kebutuhanTotal;
+      });
+    }
+  });
+
+  // Build the trend data
+  const trendData: TrendDataPoint[] = [];
+
+  dateRange.forEach(date => {
+    const dailyReqs = dateMachineReqs[date] || {};
+    
+    const point: TrendDataPoint = {
+      date,
+      totalRequired: 0,
+      totalAvailable: totalAvailableAcrossAll,
+      gap: 0
+    };
+
+    let totalDailyRequired = 0;
+
+    // Calculate gap per machine type
+    Object.keys(maxAvailabilityMap).forEach(machine => {
+      const avail = maxAvailabilityMap[machine];
+      const req = dailyReqs[machine] || 0;
+      const gap = avail - req;
+      
+      point[machine] = gap; // dynamic key
+      totalDailyRequired += req;
+    });
+    
+    // Also add any machines that are required but have 0 availability
+    Object.keys(dailyReqs).forEach(machine => {
+      if (!maxAvailabilityMap[machine]) {
+        point[machine] = 0 - dailyReqs[machine];
+        totalDailyRequired += dailyReqs[machine];
+      }
+    });
+
+    point.totalRequired = totalDailyRequired;
+    point.gap = point.totalAvailable - point.totalRequired;
+    
+    trendData.push(point);
+  });
+
+  return trendData;
+};
+
+/**
+ * Gets styles that caused machine shortages (gap < 0) on any given day.
+ */
+export const getStyleShortagesData = (
+  plans: ProductionPlan[],
+  requirements: MachineRequirementPerStyle[],
+  availabilities: MachineAvailability[],
+  filterMachine?: string
+): ShortageStyleData[] => {
+  // Map availabilities
+  const maxAvailabilityMap: Record<string, number> = {};
+  availabilities.forEach((avail) => {
+    const type = String(avail.jenisMesin).toLowerCase();
+    maxAvailabilityMap[type] = Math.max(maxAvailabilityMap[type] || 0, avail.jumlahMesin);
+  });
+
+  // Build dict of requirements
+  const reqsByStyle: Record<string, MachineRequirementPerStyle[]> = {};
+  requirements.forEach(req => {
+    if (!reqsByStyle[req.style]) reqsByStyle[req.style] = [];
+    reqsByStyle[req.style].push(req);
+  });
+
+  // Calculate daily machine requirements
+  const dateMachineReqs: Record<string, Record<string, number>> = {};
+  const activeStylesPerDate: Record<string, Set<string>> = {};
+  const styleDisplayNames: Record<string, string> = {};
+
+  plans.forEach(plan => {
+    if (plan.style && !String(plan.style).toLowerCase().includes("no plan")) {
+      if (!activeStylesPerDate[plan.date]) activeStylesPerDate[plan.date] = new Set();
+      activeStylesPerDate[plan.date].add(String(plan.style));
+      // User specifically requested to show the machine calculation style, not the display style
+      styleDisplayNames[String(plan.style)] = String(plan.style);
+    }
+  });
+
+  const finalStylePerDateLine: Record<string, string> = {};
+  plans.forEach(plan => {
+    finalStylePerDateLine[`${plan.date}|${plan.line}`] = String(plan.style);
+  });
+
+
+  const styleDailyUsage: Record<string, Record<string, Record<string, number>>> = {};
+
+  Object.entries(finalStylePerDateLine).forEach(([key, style]) => {
+    const [date, line] = key.split('|');
+    const isACC = line.toUpperCase() === 'ACC';
+    
+    if (!dateMachineReqs[date]) dateMachineReqs[date] = {};
+    if (!styleDailyUsage[date]) styleDailyUsage[date] = {};
+    
+    if (isACC) {
+      Object.entries(finalStylePerDateLine).forEach(([otherKey, otherStyle]) => {
+        const [otherDate, otherLine] = otherKey.split('|');
+        if (otherDate === date && otherLine.toUpperCase() !== 'ACC') {
+          const otherReqs = reqsByStyle[otherStyle] || [];
+          otherReqs.forEach(req => {
+            if (req.kebutuhanAccessories && req.kebutuhanAccessories > 0) {
+              const mType = String(req.jenisMesin).toLowerCase().trim();
+              dateMachineReqs[date][mType] = (dateMachineReqs[date][mType] || 0) + req.kebutuhanAccessories;
+              if (!styleDailyUsage[date][otherStyle]) styleDailyUsage[date][otherStyle] = {};
+              styleDailyUsage[date][otherStyle][mType] = (styleDailyUsage[date][otherStyle][mType] || 0) + req.kebutuhanAccessories;
+            }
+          });
+        }
+      });
+    } else {
+      const styleReqs = reqsByStyle[style] || [];
+      if (!styleDailyUsage[date][style]) styleDailyUsage[date][style] = {};
+      styleReqs.forEach(req => {
+        if (req.kebutuhanTotal <= 0) return;
+        const mType = String(req.jenisMesin).toLowerCase().trim();
+        dateMachineReqs[date][mType] = (dateMachineReqs[date][mType] || 0) + req.kebutuhanTotal;
+        styleDailyUsage[date][style][mType] = (styleDailyUsage[date][style][mType] || 0) + req.kebutuhanTotal;
+      });
+    }
+  });
+
+  const shortageMap = new Map<string, ShortageStyleData>();
+
+  // Find shortages
+  Object.keys(dateMachineReqs).forEach(date => {
+    const dailyReqs = dateMachineReqs[date];
+    const activeStyles = activeStylesPerDate[date] || new Set();
+
+    Object.keys(dailyReqs).forEach(machine => {
+      const avail = maxAvailabilityMap[machine] || 0;
+      const req = dailyReqs[machine];
+      const gap = avail - req;
+
+      if (gap < 0) {
+        if (filterMachine && filterMachine !== "ALL" && machine.toLowerCase() !== filterMachine.toLowerCase()) {
+          return; // Skip if we are filtering by a specific machine and this isn't it
+        }
+
+        // This machine is short on this date!
+        const totalReqForMachine = dailyReqs[machine];
+        
+        // Find all active styles today that USE this machine
+        activeStyles.forEach(style => {
+          const usage = styleDailyUsage[date]?.[style]?.[machine] || 0;
+          
+          if (usage > 0) {
+            let sData = shortageMap.get(style);
+            if (!sData) {
+              sData = {
+                styleName: style,
+                displayStyle: styleDisplayNames[String(style)] || String(style),
+                shortageCount: 0,
+                machinesShort: []
+              };
+              shortageMap.set(style, sData);
+            }
+            
+            // Weight is the percentage of the machine requirement that this style contributed to
+            const weight = usage / totalReqForMachine;
+            sData.shortageCount += weight;
+            
+            // Log it
+            sData.machinesShort.push({
+              machine,
+              gap,
+              date
+            });
+          }
+        });
+      }
+    });
+  });
+
+  // Sort by weighted shortage frequency and round to 2 decimals
+  return Array.from(shortageMap.values())
+    .map(data => ({
+      ...data,
+      shortageCount: Math.round(data.shortageCount * 100) / 100
+    }))
+    .sort((a, b) => b.shortageCount - a.shortageCount);
+};
+
+/**
+ * Gets the machines that are most frequently in shortage.
+ */
+export const getMachineShortagesData = (
+  plans: ProductionPlan[],
+  requirements: MachineRequirementPerStyle[],
+  availabilities: MachineAvailability[]
+): ShortageMachineData[] => {
+  // Map availabilities
+  const maxAvailabilityMap: Record<string, number> = {};
+  availabilities.forEach((avail) => {
+    const type = String(avail.jenisMesin).toLowerCase();
+    maxAvailabilityMap[type] = Math.max(maxAvailabilityMap[type] || 0, avail.jumlahMesin);
+  });
+
+  // Build dict of requirements
+  const reqsByStyle: Record<string, MachineRequirementPerStyle[]> = {};
+  requirements.forEach(req => {
+    if (!reqsByStyle[req.style]) reqsByStyle[req.style] = [];
+    reqsByStyle[req.style].push(req);
+  });
+
+  const finalStylePerDateLine: Record<string, string> = {};
+  plans.forEach(plan => {
+    if (plan.style && !String(plan.style).toLowerCase().includes("no plan")) {
+      finalStylePerDateLine[`${plan.date}|${plan.line}`] = String(plan.style);
+    }
+  });
+
+  const dateMachineReqs: Record<string, Record<string, number>> = {};
+
+  Object.entries(finalStylePerDateLine).forEach(([key, style]) => {
+    const [date, line] = key.split('|');
+    const isACC = line.toUpperCase() === 'ACC';
+    
+    if (!dateMachineReqs[date]) dateMachineReqs[date] = {};
+    
+    if (isACC) {
+      Object.entries(finalStylePerDateLine).forEach(([otherKey, otherStyle]) => {
+        const [otherDate, otherLine] = otherKey.split('|');
+        if (otherDate === date && otherLine.toUpperCase() !== 'ACC') {
+          const otherReqs = reqsByStyle[otherStyle] || [];
+          otherReqs.forEach(req => {
+            if (req.kebutuhanAccessories && req.kebutuhanAccessories > 0) {
+              const mType = String(req.jenisMesin).toLowerCase().trim();
+              dateMachineReqs[date][mType] = (dateMachineReqs[date][mType] || 0) + req.kebutuhanAccessories;
+            }
+          });
+        }
+      });
+    } else {
+      const styleReqs = reqsByStyle[style] || [];
+      styleReqs.forEach(req => {
+        if (req.kebutuhanTotal <= 0) return;
+        const mType = String(req.jenisMesin).toLowerCase().trim();
+        dateMachineReqs[date][mType] = (dateMachineReqs[date][mType] || 0) + req.kebutuhanTotal;
+      });
+    }
+  });
+
+  const shortageMap = new Map<string, ShortageMachineData>();
+
+  // Find shortages
+  Object.keys(dateMachineReqs).forEach(date => {
+    const dailyReqs = dateMachineReqs[date];
+
+    Object.keys(dailyReqs).forEach(machine => {
+      const avail = maxAvailabilityMap[machine] || 0;
+      const req = dailyReqs[machine];
+      const gap = avail - req;
+
+      if (gap < 0) {
+        let mData = shortageMap.get(machine);
+        if (!mData) {
+          mData = {
+            machine: machine.toUpperCase(),
+            shortageCount: 0,
+            totalShortageVolume: 0,
+            maxShortageVolume: 0,
+            avgShortageVolume: 0,
+            dates: []
+          };
+          shortageMap.set(machine, mData);
+        }
+        
+        const absGap = Math.abs(gap);
+        mData.shortageCount += 1;
+        mData.totalShortageVolume += absGap;
+        mData.maxShortageVolume = Math.max(mData.maxShortageVolume, absGap);
+        mData.dates.push(date);
+      }
+    });
+  });
+
+  // Calculate averages
+  shortageMap.forEach(mData => {
+    if (mData.shortageCount > 0) {
+      mData.avgShortageVolume = Math.round((mData.totalShortageVolume / mData.shortageCount) * 10) / 10;
+    }
+  });
+
+  // Sort by frequency of shortage first, then by total volume
+  return Array.from(shortageMap.values()).sort((a, b) => {
+    if (b.shortageCount !== a.shortageCount) {
+      return b.shortageCount - a.shortageCount;
+    }
+    return b.totalShortageVolume - a.totalShortageVolume;
+  });
+};
+

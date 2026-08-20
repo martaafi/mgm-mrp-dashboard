@@ -60,7 +60,9 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
   const [obStyleFilter, setObStyleFilter] = useState("");
 
   // Sorting states for Plan Sheet
-  const [planSortKey, setPlanSortKey] = useState<"date" | "line" | "style">("date");
+  const [planSortKey, setPlanSortKey] = useState<"date" | "line" | "style">(
+    "date",
+  );
   const [planSortDir, setPlanSortDir] = useState<"asc" | "desc">("asc");
 
   // Pagination states
@@ -200,7 +202,9 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
     return isValid;
   });
 
-  const uniqueLines = Array.from(new Set(plans.map((p) => p.line).filter(Boolean))).sort();
+  const uniqueLines = Array.from(
+    new Set(plans.map((p) => p.line).filter(Boolean)),
+  ).sort();
 
   const uniqueStyles = Array.from(
     new Set(requirements.map((r) => r.style).filter(Boolean)),
@@ -221,7 +225,10 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
       aVal = String(a[planSortKey] || "");
       bVal = String(b[planSortKey] || "");
     }
-    const comparison = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
+    const comparison = aVal.localeCompare(bVal, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
     return planSortDir === "asc" ? comparison : -comparison;
   });
 
@@ -364,23 +371,34 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                   Production Planning Style by PPIC
                 </span>
-                
+
                 <div className="flex items-center space-x-2">
                   <DateRangePicker
                     startDate={planStartDate}
                     endDate={planEndDate}
-                    onStartDateChange={(date) => { setPlanStartDate(date); setCurrentPagePlan(1); }}
-                    onEndDateChange={(date) => { setPlanEndDate(date); setCurrentPagePlan(1); }}
+                    onStartDateChange={(date) => {
+                      setPlanStartDate(date);
+                      setCurrentPagePlan(1);
+                    }}
+                    onEndDateChange={(date) => {
+                      setPlanEndDate(date);
+                      setCurrentPagePlan(1);
+                    }}
                   />
-                  
+
                   <select
                     value={planLineFilter}
-                    onChange={(e) => { setPlanLineFilter(e.target.value); setCurrentPagePlan(1); }}
+                    onChange={(e) => {
+                      setPlanLineFilter(e.target.value);
+                      setCurrentPagePlan(1);
+                    }}
                     className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 shadow-sm font-semibold transition-colors"
                   >
                     <option value="">All Lines</option>
-                    {uniqueLines.map(line => (
-                      <option key={line} value={line}>{line}</option>
+                    {uniqueLines.map((line) => (
+                      <option key={line} value={line}>
+                        {line}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -397,7 +415,11 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                         <div className="flex items-center space-x-1">
                           <span>Date</span>
                           {planSortKey === "date" ? (
-                            planSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                            planSortDir === "asc" ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )
                           ) : (
                             <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500 opacity-50" />
                           )}
@@ -410,7 +432,11 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                         <div className="flex items-center space-x-1">
                           <span>Line</span>
                           {planSortKey === "line" ? (
-                            planSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                            planSortDir === "asc" ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )
                           ) : (
                             <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500 opacity-50" />
                           )}
@@ -423,7 +449,11 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                         <div className="flex items-center space-x-1">
                           <span>Style</span>
                           {planSortKey === "style" ? (
-                            planSortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                            planSortDir === "asc" ? (
+                              <ChevronUp className="w-3 h-3" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3" />
+                            )
                           ) : (
                             <ArrowUpDown className="w-3 h-3 text-slate-400 dark:text-slate-500 opacity-50" />
                           )}
@@ -433,14 +463,22 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {paginatedPlans.map((p, index) => (
-                      <tr key={`plan-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <tr
+                        key={`plan-${index}`}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                      >
                         <td className="p-2.5 text-indigo-700 dark:text-indigo-400 font-medium">
-                          {p.date ? format(new Date(p.date), "dd MMM yyyy") : "-"}
+                          {p.date
+                            ? format(new Date(p.date), "dd MMM yyyy")
+                            : "-"}
                         </td>
                         <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
                           {p.line}
                         </td>
-                        <td className="p-2.5 text-slate-800 dark:text-slate-200 font-semibold truncate max-w-xs" title={p.displayStyle || p.style}>
+                        <td
+                          className="p-2.5 text-slate-800 dark:text-slate-200 font-semibold truncate max-w-xs"
+                          title={p.displayStyle || p.style}
+                        >
                           {p.displayStyle || p.style}
                         </td>
                       </tr>
@@ -494,7 +532,10 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {paginatedRequirements.map((req, index) => (
-                      <tr key={`req-${index}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <tr
+                        key={`req-${index}`}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                      >
                         <td className="p-2.5">
                           <div className="font-semibold text-slate-800 dark:text-slate-200">
                             {req.style}
@@ -554,7 +595,10 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                     {paginatedAvailabilities.map((item) => (
-                      <tr key={item.jenisMesin} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <tr
+                        key={item.jenisMesin}
+                        className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                      >
                         <td className="p-3 font-bold text-slate-800 dark:text-slate-200 text-sm">
                           {item.jenisMesin}
                         </td>

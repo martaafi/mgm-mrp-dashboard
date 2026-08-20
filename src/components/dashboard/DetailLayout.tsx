@@ -61,17 +61,27 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
 
     // Also include any machines required by active styles just in case they aren't in availabilities
     const reqLookup: Record<string, number> = {};
+    const accReqLookup: Record<string, number> = {};
 
     activeLines.forEach((al) => {
-      const styleReqs = requirements.filter(
-        (r) => r.style === al.style && r.kebutuhanTotal > 0,
-      );
-      styleReqs.forEach((r) => {
-        const mType = r.jenisMesin.trim().toLowerCase();
-        machineTypes.add(r.jenisMesin.trim());
-        // Populate fast lookup dictionary: style|machine -> required amount
-        reqLookup[`${al.style}|${mType}`] = r.kebutuhanTotal;
-      });
+      const isACC = al.line.toUpperCase() === 'ACC';
+      if (!isACC) {
+        const styleReqs = requirements.filter(
+          (r) => r.style === al.style && (r.kebutuhanTotal > 0 || (r.kebutuhanAccessories && r.kebutuhanAccessories > 0)),
+        );
+        styleReqs.forEach((r) => {
+          const mType = r.jenisMesin.trim().toLowerCase();
+          if (r.kebutuhanTotal > 0) {
+            machineTypes.add(r.jenisMesin.trim());
+            // Populate fast lookup dictionary: style|machine -> required amount
+            reqLookup[`${al.style}|${mType}`] = r.kebutuhanTotal;
+          }
+          if (r.kebutuhanAccessories && r.kebutuhanAccessories > 0) {
+            machineTypes.add(r.jenisMesin.trim());
+            accReqLookup[mType] = (accReqLookup[mType] || 0) + r.kebutuhanAccessories;
+          }
+        });
+      }
     });
 
     const rows = Array.from(machineTypes)
@@ -90,8 +100,12 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
         const machineKey = machine.toLowerCase();
 
         activeLines.forEach((al) => {
+          const isACC = al.line.toUpperCase() === 'ACC';
           // Fast O(1) lookup
-          const needed = reqLookup[`${al.style}|${machineKey}`] || 0;
+          const needed = isACC 
+              ? (accReqLookup[machineKey] || 0) 
+              : (reqLookup[`${al.style}|${machineKey}`] || 0);
+              
           lineRequirements[al.line] = needed;
           kebutuhanTotal += needed;
         });
@@ -273,26 +287,26 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   key={row.machine}
                   className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
                 >
-                  <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 px-4 py-3 border-r border-slate-200 dark:border-slate-700 text-left font-semibold text-slate-700 dark:text-slate-300 shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-4 py-3 border-r border-slate-200 dark:border-slate-700 text-left font-semibold text-slate-700 dark:text-slate-300 shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
                     {row.machine}
                   </td>
-                  <td className="sticky left-[200px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] font-bold text-base">
+                  <td className="sticky left-[200px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] font-bold text-base">
                     {row.totalMesin > 0 ? row.totalMesin : "-"}
                   </td>
-                  <td className="sticky left-[296px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="sticky left-[296px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
                     {row.baseCount > 0 ? row.baseCount : "-"}
                   </td>
-                  <td className="sticky left-[392px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-red-600 dark:text-red-400 font-semibold">
+                  <td className="sticky left-[392px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-red-600 dark:text-red-400 font-semibold">
                     {row.pinjamCount > 0 ? `+${row.pinjamCount}` : "-"}
                   </td>
-                  <td className="sticky left-[472px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-amber-600 dark:text-amber-400 font-semibold">
+                  <td className="sticky left-[472px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-amber-600 dark:text-amber-400 font-semibold">
                     {row.sewaCount > 0 ? `+${row.sewaCount}` : "-"}
                   </td>
-                  <td className="sticky left-[552px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="sticky left-[552px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
                     {row.kebutuhanTotal > 0 ? row.kebutuhanTotal : "-"}
                   </td>
                   <td
-                    className={`sticky left-[680px] z-10 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] ${row.gap < 0 ? "bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-900/70" : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 text-emerald-600 dark:text-emerald-500"}`}
+                    className={`sticky left-[680px] z-10 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] ${row.gap < 0 ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-800" : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 text-emerald-600 dark:text-emerald-500"}`}
                   >
                     {row.gap !== 0 ? row.gap : "0"}
                   </td>
@@ -334,7 +348,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   {tableData.totals.kebutuhanTotal}
                 </td>
                 <td
-                  className={`sticky left-[680px] z-30 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900/60 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400"}`}
+                  className={`sticky left-[680px] z-30 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
                 >
                   {tableData.totals.gap}
                 </td>

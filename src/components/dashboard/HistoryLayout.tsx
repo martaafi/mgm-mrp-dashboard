@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { format } from "date-fns";
+import { format, getISOWeek, getYear } from "date-fns";
 import {
   AlertTriangle,
   Clock,
@@ -10,29 +10,49 @@ import {
   ChevronRight,
   ChevronLeft,
   Activity,
+  BarChart2,
+  Filter,
 } from "lucide-react";
 import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import {
   ProductionPlan,
+  SnapshotRecord,
   MachineRequirementPerStyle,
   MachineAvailability,
 } from "../../types/mrp";
 import { calculateMachineRequirements } from "../../utils/mrpCalculations";
 
 interface HistoryLayoutProps {
-  filteredPlans: ProductionPlan[];
+  snapshots: SnapshotRecord[];
+  plans: ProductionPlan[];
   requirements: MachineRequirementPerStyle[];
   availabilities: MachineAvailability[];
 }
 
 export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
-  filteredPlans,
+  snapshots,
+  plans,
   requirements,
   availabilities,
 }) => {
-  // Format date helper: YYYY-MM-DD -> DD-MM-YYYY
+  // Format date helper: YYYY-MM-DD -> DD MMM YYYY
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
-    return format(new Date(dateString), "dd MMM yyyy");
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return dateString;
+      return format(d, "dd MMM yyyy");
+    } catch {
+      return dateString;
+    }
   };
 
   const getTodayStr = () => {
@@ -43,149 +63,74 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     return `${year}-${month}-${day}`;
   };
 
-  // Ambil semua plan yang ada perubahan (belum di-sort)
-  const rawChangedPlans = useMemo(() => {
+  // Filter snapshots: only those with changes, and planningDate >= today
+  const rawChangedSnapshots = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return filteredPlans.filter((p) => {
-      if (!p.isStyleChanged && !p.isDisplayStyleChanged) return false;
+    return snapshots.filter((s) => {
+      if (!s.isMachineStyleChanged && !s.isPlanningStyleChanged) return false;
 
-      // Filter: Tampilkan mulai dari hari ini dan masa depan
-      const planDate = new Date(p.date);
+      const planDate = new Date(s.planningDate);
       planDate.setHours(0, 0, 0, 0);
       return planDate >= today;
     });
-  }, [filteredPlans]);
+  }, [snapshots]);
 
-  // Pre-calculate macro impact warning for ALL raw changed plans
-  const planMacroImpactMap = useMemo(() => {
-    const map = new Map<ProductionPlan, boolean>();
-    const todayStr = getTodayStr();
+  // Sort snapshots by priority: Amber (machine style changed) > Blue (planning only), then by nearest date
+  const changedSnapshots = useMemo(() => {
+    return [...rawChangedSnapshots].sort((a, b) => {
+      const aAmber = a.isMachineStyleChanged ? 1 : 2;
+      const bAmber = b.isMachineStyleChanged ? 1 : 2;
 
-    rawChangedPlans.forEach((plan) => {
-      if (!plan.isStyleChanged) {
-        map.set(plan, false);
-        return;
-      }
+      if (aAmber !== bAmber) return aAmber - bAmber;
 
-      const impactPlans = filteredPlans.filter(
-        (p) => p.date >= todayStr && p.date <= plan.date,
+      return (
+        new Date(a.planningDate).getTime() - new Date(b.planningDate).getTime()
       );
-
-      if (impactPlans.length === 0) {
-        map.set(plan, false);
-        return;
-      }
-
-      const currentFactoryReqs = calculateMachineRequirements(
-        impactPlans,
-        requirements,
-        availabilities,
-      );
-
-      const hypotheticalPlans = impactPlans.map((p) => {
-        if (p.isStyleChanged && p.historyStyle) {
-          return { ...p, style: p.historyStyle };
-        }
-        return p;
-      });
-
-      const hypotheticalFactoryReqs = calculateMachineRequirements(
-        hypotheticalPlans,
-        requirements,
-        availabilities,
-      );
-
-      let hasNewShortage = false;
-      const allMachineTypes = new Set([
-        ...currentFactoryReqs.map((r) => r.machine),
-        ...hypotheticalFactoryReqs.map((r) => r.machine),
-      ]);
-
-      for (const machine of Array.from(allMachineTypes)) {
-        const current = currentFactoryReqs.find((r) => r.machine === machine);
-        const hypothetical = hypotheticalFactoryReqs.find(
-          (r) => r.machine === machine,
-        );
-
-        const available =
-          availabilities.find(
-            (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
-          )?.jumlahMesin || 0;
-        const oldGap = hypothetical ? hypothetical.gap : available;
-        const newGap = current ? current.gap : available;
-
-        if (newGap < 0 && oldGap >= 0) hasNewShortage = true;
-        if (newGap < 0 && oldGap < 0 && newGap < oldGap) hasNewShortage = true;
-
-        if (hasNewShortage) break;
-      }
-
-      map.set(plan, hasNewShortage);
     });
+  }, [rawChangedSnapshots]);
 
-    return map;
-  }, [rawChangedPlans, filteredPlans, requirements, availabilities]);
+  const [selectedSnapshot, setSelectedSnapshot] =
+    useState<SnapshotRecord | null>(null);
 
-  // Sort plan berdasarkan prioritas Merah > Kuning > Biru, lalu tanggal terdekat
-  const changedPlans = useMemo(() => {
-    return [...rawChangedPlans].sort((a, b) => {
-      const aRed = planMacroImpactMap.get(a) || false;
-      const bRed = planMacroImpactMap.get(b) || false;
-      const aYellow = !!a.isStyleChanged;
-      const bYellow = !!b.isStyleChanged;
-
-      const getPriority = (isRed: boolean, isYellow: boolean) => {
-        if (isRed) return 1;
-        if (isYellow) return 2;
-        return 3;
-      };
-
-      const pA = getPriority(aRed, aYellow);
-      const pB = getPriority(bRed, bYellow);
-
-      if (pA !== pB) {
-        return pA - pB;
-      }
-
-      return new Date(a.date).getTime() - new Date(b.date).getTime();
-    });
-  }, [rawChangedPlans, planMacroImpactMap]);
-
-  const [selectedPlan, setSelectedPlan] = useState<ProductionPlan | null>(null);
-
-  // Set initial selected plan after changedPlans is ready
+  // Set initial selected snapshot after changedSnapshots is ready
   React.useEffect(() => {
-    if (changedPlans.length > 0 && !selectedPlan) {
-      setSelectedPlan(changedPlans[0]);
+    if (changedSnapshots.length > 0 && !selectedSnapshot) {
+      setSelectedSnapshot(changedSnapshots[0]);
     }
-  }, [changedPlans, selectedPlan]);
+  }, [changedSnapshots, selectedSnapshot]);
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeSubTab, setActiveSubTab] = useState<"makro" | "detail">("makro");
   const itemsPerPage = 50;
 
-  const totalPages = Math.ceil(changedPlans.length / itemsPerPage);
+  const totalPages = Math.ceil(changedSnapshots.length / itemsPerPage);
 
-  const paginatedPlans = useMemo(() => {
+  const paginatedSnapshots = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return changedPlans.slice(startIndex, startIndex + itemsPerPage);
-  }, [changedPlans, currentPage]);
+    return changedSnapshots.slice(startIndex, startIndex + itemsPerPage);
+  }, [changedSnapshots, currentPage]);
 
-  // Hitung dampak perubahan mesin untuk plan yang dipilih
+  // Calculate machine impact for selected snapshot item
   const impactAnalysis = useMemo(() => {
-    if (!selectedPlan) return null;
+    if (!selectedSnapshot) return null;
 
-    // Jika style perhitungannya tidak berubah, maka mesinnya pasti sama
-    if (!selectedPlan.isStyleChanged || !selectedPlan.historyStyle) {
+    // If machine style didn't change, no machine impact
+    if (
+      !selectedSnapshot.isMachineStyleChanged ||
+      !selectedSnapshot.lastMachineStyle
+    ) {
       return { comparison: [], hasCriticalImpact: false };
     }
 
     const oldReqs = requirements.filter(
-      (r) => r.style === selectedPlan.historyStyle && r.kebutuhanTotal > 0,
+      (r) =>
+        r.style === selectedSnapshot.lastMachineStyle && r.kebutuhanTotal > 0,
     );
     const newReqs = requirements.filter(
-      (r) => r.style === selectedPlan.style && r.kebutuhanTotal > 0,
+      (r) =>
+        r.style === selectedSnapshot.updateMachineStyle && r.kebutuhanTotal > 0,
     );
 
     const machineTypes = new Set([
@@ -195,7 +140,6 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
     const comparison = Array.from(machineTypes)
       .map((machineKey) => {
-        // Find original casing
         const originalName =
           oldReqs.find((r) => r.jenisMesin.trim().toLowerCase() === machineKey)
             ?.jenisMesin ||
@@ -226,38 +170,56 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     const hasCriticalImpact = comparison.some((c) => c.isNew || c.isIncreased);
 
     return { comparison, hasCriticalImpact };
-  }, [selectedPlan, requirements]);
+  }, [selectedSnapshot, requirements]);
 
-  // Hitung dampak Makro (Keseluruhan Rentang Waktu) terhadap pabrik
+  // Calculate Macro (Factory-wide) Impact
   const factoryImpact = useMemo(() => {
-    if (!filteredPlans || filteredPlans.length === 0 || !selectedPlan)
-      return null;
+    if (!plans || plans.length === 0 || !selectedSnapshot) return null;
 
     const todayStr = getTodayStr();
 
-    // Saring data HANYA dari Hari Ini sampai Tanggal History yang diklik
-    const impactPlans = filteredPlans.filter(
-      (plan) => plan.date >= todayStr && plan.date <= selectedPlan.date,
+    // Filter plans from today to the selected snapshot's planning date
+    const impactPlans = plans.filter(
+      (plan) =>
+        plan.date >= todayStr && plan.date <= selectedSnapshot.planningDate,
     );
 
     if (impactPlans.length === 0) return null;
 
-    // Skenario Sesudah (Real/Current): Kondisi pada seluruh rentang waktu menggunakan data yang ada
+    // After scenario (Real/Current): Use current plan data
     const currentFactoryReqs = calculateMachineRequirements(
       impactPlans,
       requirements,
       availabilities,
     );
 
-    // Skenario Sebelum (Hypothetical): Kondisi pada seluruh rentang waktu jika TIDAK ADA perubahan PPIC (revert ke historyStyle)
+    // Before scenario (Hypothetical): Revert changed machine styles
     let totalStyleChanges = 0;
-    const hypotheticalPlans = impactPlans.map((p) => {
-      if (p.isStyleChanged || p.isDisplayStyleChanged) {
-        totalStyleChanges++;
-      }
+    const changedSnapshotsInRange = rawChangedSnapshots.filter(
+      (s) =>
+        s.planningDate >= todayStr &&
+        s.planningDate <= selectedSnapshot.planningDate,
+    );
 
-      if (p.isStyleChanged && p.historyStyle) {
-        return { ...p, style: p.historyStyle };
+    const hypotheticalPlans = impactPlans.map((p) => {
+      const matchingSnapshot = changedSnapshotsInRange.find(
+        (s) => s.planningDate === p.date && s.line === p.line,
+      );
+
+      if (matchingSnapshot) {
+        if (
+          matchingSnapshot.isMachineStyleChanged ||
+          matchingSnapshot.isPlanningStyleChanged
+        ) {
+          totalStyleChanges++;
+        }
+
+        if (
+          matchingSnapshot.isMachineStyleChanged &&
+          matchingSnapshot.lastMachineStyle
+        ) {
+          return { ...p, style: matchingSnapshot.lastMachineStyle };
+        }
       }
       return p;
     });
@@ -268,11 +230,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       availabilities,
     );
 
-    // Bandingkan mesin-mesin yang terdampak (ada perbedaan)
+    // Compare machines across both scenarios
     const factoryComparison: any[] = [];
     let hasNewShortage = false;
 
-    // Kumpulkan semua tipe mesin dari kedua skenario
     const allMachineTypes = new Set([
       ...currentFactoryReqs.map((r) => r.machine),
       ...hypotheticalFactoryReqs.map((r) => r.machine),
@@ -322,10 +283,6 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
     return {
       comparison: factoryComparison.sort((a, b) => {
-        // Tentukan prioritas berdasarkan status
-        // 1: Makin Shortage / Jadi Shortage
-        // 2: Shortage (Tetap)
-        // 3: Aman
         const getPriority = (row: any) => {
           if (row.isNowShortage || row.isWorseShortage) return 1;
           if (row.newGap < 0) return 2;
@@ -335,440 +292,1247 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         const priorityA = getPriority(a);
         const priorityB = getPriority(b);
 
-        // Sort berdasarkan prioritas (1 -> 2 -> 3)
         if (priorityA !== priorityB) {
           return priorityA - priorityB;
         }
 
-        // Jika prioritasnya sama, urutkan berdasarkan gap terburuk (paling negatif di atas)
         return a.newGap - b.newGap;
       }),
       hasNewShortage,
       totalStyleChanges,
       startDate: todayStr,
-      endDate: selectedPlan.date,
+      endDate: selectedSnapshot.planningDate,
     };
-  }, [filteredPlans, selectedPlan, requirements, availabilities]);
+  }, [
+    plans,
+    rawChangedSnapshots,
+    selectedSnapshot,
+    requirements,
+    availabilities,
+  ]);
+
+  // === CHART: Weekly Comparison Data ===
+  const [chartMachineFilter, setChartMachineFilter] = useState<string>("ALL");
+  const [selectedChartWeek, setSelectedChartWeek] = useState<string | null>(
+    null,
+  );
+
+  // Get all unique machine types from snapshots that have machine style changes
+  const allChartMachineTypes = useMemo(() => {
+    const machineSet = new Set<string>();
+    snapshots.forEach((s) => {
+      // Collect machines from both last and update styles
+      const lastReqs = requirements.filter(
+        (r) => r.style === s.lastMachineStyle,
+      );
+      const updateReqs = requirements.filter(
+        (r) => r.style === s.updateMachineStyle,
+      );
+      lastReqs.forEach((r) => machineSet.add(r.jenisMesin));
+      updateReqs.forEach((r) => machineSet.add(r.jenisMesin));
+    });
+    return Array.from(machineSet).sort();
+  }, [snapshots, requirements]);
+
+  // Helper: get ISO week label from a date string
+  const getWeekLabel = (dateStr: string): string => {
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr);
+      const week = getISOWeek(d);
+      const year = getYear(d);
+      return `W${week}-${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Build weekly comparison chart data
+  // Logic: For each day, SUM machine requirements across all lines (simultaneous).
+  //        For each week, take the MAX daily total (peak demand).
+  const weeklyComparisonData = useMemo(() => {
+    const todayStr = getTodayStr();
+
+    // Only use snapshots from today onwards
+    const futureSnapshots = snapshots.filter((s) => s.planningDate >= todayStr);
+    if (futureSnapshots.length === 0) {
+      return {
+        chartData: [],
+        alerts: [],
+        lastVersionLabel: "Plan PPIC (Sebelum)",
+        updateVersionLabel: "Plan PPIC (Sesudah)",
+        lastWeekCode: "Sebelum",
+        updateWeekCode: "Sesudah",
+        lastSnapshotDateStr: "",
+        updateSnapshotDateStr: "",
+      };
+    }
+
+    const filterMachine = (r: MachineRequirementPerStyle) =>
+      chartMachineFilter === "ALL" ||
+      r.jenisMesin.toLowerCase() === chartMachineFilter.toLowerCase();
+
+    // Step 1: Group snapshots by date, then sum requirements per day across all lines
+    // Structure: { date -> { lastReq: number, updateReq: number } }
+    const dailyMap: Record<string, { lastReq: number; updateReq: number }> = {};
+
+    futureSnapshots.forEach((s) => {
+      const date = s.planningDate;
+      if (!dailyMap[date]) {
+        dailyMap[date] = { lastReq: 0, updateReq: 0 };
+      }
+
+      const lastReqs = requirements.filter(
+        (r) => r.style === s.lastMachineStyle,
+      );
+      const updateReqs = requirements.filter(
+        (r) => r.style === s.updateMachineStyle,
+      );
+
+      const lastTotal = lastReqs
+        .filter(filterMachine)
+        .reduce((sum, r) => sum + r.kebutuhanTotal, 0);
+      const updateTotal = updateReqs
+        .filter(filterMachine)
+        .reduce((sum, r) => sum + r.kebutuhanTotal, 0);
+
+      dailyMap[date].lastReq += lastTotal;
+      dailyMap[date].updateReq += updateTotal;
+    });
+
+    // Step 2: Group daily totals by week, take MAX per week
+    const weekMap: Record<
+      string,
+      {
+        lastReq: number;
+        updateReq: number;
+        available: number;
+        shortageAlerts: {
+          machine: string;
+          type: "RED" | "YELLOW";
+          lastReq?: number;
+          updateReq?: number;
+        }[];
+      }
+    > = {};
+
+    Object.entries(dailyMap).forEach(([date, daily]) => {
+      const weekLabel = getWeekLabel(date);
+      if (!weekLabel) return;
+
+      if (!weekMap[weekLabel]) {
+        weekMap[weekLabel] = {
+          lastReq: 0,
+          updateReq: 0,
+          available: 0,
+          shortageAlerts: [],
+        };
+      }
+
+      // Take the MAX daily value across all days in this week
+      weekMap[weekLabel].lastReq = Math.max(
+        weekMap[weekLabel].lastReq,
+        daily.lastReq,
+      );
+      weekMap[weekLabel].updateReq = Math.max(
+        weekMap[weekLabel].updateReq,
+        daily.updateReq,
+      );
+    });
+
+    // Step 3: Detect shortage alerts per week
+    // For each week, check if update > last AND update > available for any machine
+    const weekDates: Record<string, string[]> = {};
+    Object.keys(dailyMap).forEach((date) => {
+      const weekLabel = getWeekLabel(date);
+      if (!weekLabel) return;
+      if (!weekDates[weekLabel]) weekDates[weekLabel] = [];
+      weekDates[weekLabel].push(date);
+    });
+
+    Object.entries(weekDates).forEach(([weekLabel, dates]) => {
+      if (!weekMap[weekLabel]) return;
+
+      // Find snapshots in this week that have machine style changes
+      const weekSnapshots = futureSnapshots.filter(
+        (s) => dates.includes(s.planningDate) && s.isMachineStyleChanged,
+      );
+
+      // Per-machine daily analysis for shortage detection
+      const machineMaxUpdate: Record<string, number> = {};
+      const machineMaxLast: Record<string, number> = {};
+
+      dates.forEach((date) => {
+        const daySnapshots = futureSnapshots.filter(
+          (s) => s.planningDate === date,
+        );
+        const machineDayUpdate: Record<string, number> = {};
+        const machineDayLast: Record<string, number> = {};
+
+        daySnapshots.forEach((s) => {
+          const updateReqs = requirements.filter(
+            (r) => r.style === s.updateMachineStyle,
+          );
+          const lastReqs = requirements.filter(
+            (r) => r.style === s.lastMachineStyle,
+          );
+
+          updateReqs.forEach((r) => {
+            machineDayUpdate[r.jenisMesin] =
+              (machineDayUpdate[r.jenisMesin] || 0) + r.kebutuhanTotal;
+          });
+          lastReqs.forEach((r) => {
+            machineDayLast[r.jenisMesin] =
+              (machineDayLast[r.jenisMesin] || 0) + r.kebutuhanTotal;
+          });
+        });
+
+        // Take max across days for each machine
+        Object.entries(machineDayUpdate).forEach(([machine, count]) => {
+          machineMaxUpdate[machine] = Math.max(
+            machineMaxUpdate[machine] || 0,
+            count,
+          );
+        });
+        Object.entries(machineDayLast).forEach(([machine, count]) => {
+          machineMaxLast[machine] = Math.max(
+            machineMaxLast[machine] || 0,
+            count,
+          );
+        });
+      });
+
+      // Check if any machine has update > last AND is in shortage
+      if (weekSnapshots.length > 0) {
+        Object.entries(machineMaxUpdate).forEach(([machine, updateCount]) => {
+          const lastCount = machineMaxLast[machine] || 0;
+          if (updateCount > lastCount) {
+            const avail = availabilities.find(
+              (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
+            );
+            if (avail && updateCount > avail.jumlahMesin) {
+              const alertType =
+                lastCount <= avail.jumlahMesin ? "RED" : "YELLOW";
+              if (
+                !weekMap[weekLabel].shortageAlerts.some(
+                  (a) => a.machine === machine,
+                )
+              ) {
+                weekMap[weekLabel].shortageAlerts.push({
+                  machine,
+                  type: alertType,
+                  lastReq: lastCount,
+                  updateReq: updateCount,
+                });
+              }
+            }
+          }
+        });
+      }
+    });
+
+    // Step 4: Available line for filtered machine
+    if (chartMachineFilter !== "ALL") {
+      const avail = availabilities.find(
+        (a) => a.jenisMesin.toLowerCase() === chartMachineFilter.toLowerCase(),
+      );
+      const availCount = avail ? avail.jumlahMesin : 0;
+      Object.keys(weekMap).forEach((w) => {
+        weekMap[w].available = availCount;
+      });
+    }
+
+    // Step 5: Sort weeks and build output
+    const sortedWeeks = Object.keys(weekMap).sort((a, b) => {
+      const parseWeek = (w: string) => {
+        const match = w.match(/W(\d+)-(\d+)/);
+        if (!match) return 0;
+        return parseInt(match[2]) * 100 + parseInt(match[1]);
+      };
+      return parseWeek(a) - parseWeek(b);
+    });
+
+    const chartData = sortedWeeks.map((w) => {
+      // Filter shortage alerts based on the selected machine filter
+      const filteredAlerts = weekMap[w].shortageAlerts.filter(
+        (a) =>
+          chartMachineFilter === "ALL" ||
+          a.machine.toLowerCase() === chartMachineFilter.toLowerCase(),
+      );
+
+      return {
+        week: w,
+        lastPlan: weekMap[w].lastReq,
+        updatePlan: weekMap[w].updateReq,
+        available: weekMap[w].available,
+        shortageAlerts: filteredAlerts,
+      };
+    });
+
+    const alerts = chartData.filter((d) => d.shortageAlerts.length > 0);
+
+    const targetSnap =
+      selectedSnapshot ||
+      futureSnapshots.find((s) => s.lastSnapshotDate || s.updateSnapshotDate) ||
+      futureSnapshots.find((s) => s.lastVersion || s.updateVersion) ||
+      futureSnapshots[0] ||
+      snapshots.find((s) => s.lastSnapshotDate || s.updateSnapshotDate) ||
+      snapshots[0];
+
+    let lastVersionLabel = "Plan PPIC (Sebelum)";
+    let updateVersionLabel = "Plan PPIC (Sesudah)";
+    let lastWeekCode = "";
+    let updateWeekCode = "";
+    let lastSnapshotDateStr = "";
+    let updateSnapshotDateStr = "";
+
+    if (targetSnap) {
+      const rawLast = (targetSnap.lastVersion || "").trim();
+      const rawUpdate = (targetSnap.updateVersion || "").trim();
+
+      const cleanLast = rawLast.split("-")[0].trim();
+      const cleanUpdate = rawUpdate.split("-")[0].trim();
+
+      const lastW = cleanLast
+        ? cleanLast.toUpperCase().startsWith("W")
+          ? cleanLast
+          : `W${cleanLast}`
+        : "";
+      const updateW = cleanUpdate
+        ? cleanUpdate.toUpperCase().startsWith("W")
+          ? cleanUpdate
+          : `W${cleanUpdate}`
+        : "";
+
+      if (lastW) lastVersionLabel = `by Plan PPIC ${lastW}`;
+      if (updateW) updateVersionLabel = `by Plan PPIC ${updateW}`;
+      lastWeekCode = lastW;
+      updateWeekCode = updateW;
+
+      const snapWithLastDate = snapshots.find((s) => s.lastSnapshotDate);
+      const snapWithUpdateDate = snapshots.find((s) => s.updateSnapshotDate);
+
+      const rawLastDate =
+        targetSnap.lastSnapshotDate || snapWithLastDate?.lastSnapshotDate || "";
+      const rawUpdateDate =
+        targetSnap.updateSnapshotDate ||
+        snapWithUpdateDate?.updateSnapshotDate ||
+        "";
+
+      if (rawLastDate) lastSnapshotDateStr = formatDate(rawLastDate);
+      if (rawUpdateDate) updateSnapshotDateStr = formatDate(rawUpdateDate);
+    }
+
+    return {
+      chartData,
+      alerts,
+      lastVersionLabel,
+      updateVersionLabel,
+      lastWeekCode: lastWeekCode || "Sebelum",
+      updateWeekCode: updateWeekCode || "Sesudah",
+      lastSnapshotDateStr,
+      updateSnapshotDateStr,
+    };
+  }, [
+    snapshots,
+    requirements,
+    availabilities,
+    chartMachineFilter,
+    selectedSnapshot,
+  ]);
+
+  // Auto-select first week when chart data is available
+  React.useEffect(() => {
+    if (weeklyComparisonData.chartData.length > 0 && !selectedChartWeek) {
+      setSelectedChartWeek(weeklyComparisonData.chartData[0].week);
+    }
+  }, [weeklyComparisonData.chartData, selectedChartWeek]);
+
+  // Compute per-machine breakdown for the selected week
+  const selectedWeekMachineData = useMemo(() => {
+    if (!selectedChartWeek) return [];
+
+    const todayStr = getTodayStr();
+    const futureSnapshots = snapshots.filter((s) => s.planningDate >= todayStr);
+
+    // Get unique dates in the selected week
+    const weekDates = [
+      ...new Set(
+        futureSnapshots
+          .map((s) => s.planningDate)
+          .filter((date) => getWeekLabel(date) === selectedChartWeek),
+      ),
+    ];
+
+    if (weekDates.length === 0) return [];
+
+    // For each date, compute per-machine requirements (sum across all lines)
+    // Then take MAX across days in the week
+    const machineMaxLast: Record<string, number> = {};
+    const machineMaxUpdate: Record<string, number> = {};
+
+    weekDates.forEach((date) => {
+      const daySnapshots = futureSnapshots.filter(
+        (s) => s.planningDate === date,
+      );
+      const machineDayLast: Record<string, number> = {};
+      const machineDayUpdate: Record<string, number> = {};
+
+      daySnapshots.forEach((s) => {
+        const lastReqs = requirements.filter(
+          (r) => r.style === s.lastMachineStyle,
+        );
+        const updateReqs = requirements.filter(
+          (r) => r.style === s.updateMachineStyle,
+        );
+
+        lastReqs.forEach((r) => {
+          machineDayLast[r.jenisMesin] =
+            (machineDayLast[r.jenisMesin] || 0) + r.kebutuhanTotal;
+        });
+        updateReqs.forEach((r) => {
+          machineDayUpdate[r.jenisMesin] =
+            (machineDayUpdate[r.jenisMesin] || 0) + r.kebutuhanTotal;
+        });
+      });
+
+      Object.entries(machineDayLast).forEach(([machine, count]) => {
+        machineMaxLast[machine] = Math.max(machineMaxLast[machine] || 0, count);
+      });
+      Object.entries(machineDayUpdate).forEach(([machine, count]) => {
+        machineMaxUpdate[machine] = Math.max(
+          machineMaxUpdate[machine] || 0,
+          count,
+        );
+      });
+    });
+
+    // Build per-machine comparison
+    const allMachines = new Set([
+      ...Object.keys(machineMaxLast),
+      ...Object.keys(machineMaxUpdate),
+    ]);
+
+    return Array.from(allMachines)
+      .map((machine) => {
+        const lastReq = machineMaxLast[machine] || 0;
+        const updateReq = machineMaxUpdate[machine] || 0;
+        const available =
+          availabilities.find(
+            (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
+          )?.jumlahMesin || 0;
+
+        const oldGap = available - lastReq;
+        const newGap = available - updateReq;
+
+        const isNowShortage = newGap < 0 && oldGap >= 0;
+        const isWorseShortage = newGap < 0 && oldGap < 0 && newGap < oldGap;
+
+        return {
+          machine,
+          available,
+          lastReq,
+          updateReq,
+          oldGap,
+          newGap,
+          isNowShortage,
+          isWorseShortage,
+        };
+      })
+      .sort((a, b) => {
+        const getPriority = (row: any) => {
+          if (row.isNowShortage || row.isWorseShortage) return 1;
+          if (row.newGap < 0) return 2;
+          return 3;
+        };
+        const pA = getPriority(a);
+        const pB = getPriority(b);
+        if (pA !== pB) return pA - pB;
+        return a.newGap - b.newGap;
+      });
+  }, [selectedChartWeek, snapshots, requirements, availabilities]);
+
+  // Custom dot renderer for shortage alerts
+  const renderAlertDot = (props: any) => {
+    const { cx, cy, payload } = props;
+    if (
+      !payload ||
+      !payload.shortageAlerts ||
+      payload.shortageAlerts.length === 0
+    ) {
+      return (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={4}
+          fill="#3b82f6"
+          stroke="#fff"
+          strokeWidth={2}
+          style={{ cursor: "pointer" }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (payload?.week) setSelectedChartWeek(payload.week);
+          }}
+        />
+      );
+    }
+
+    const hasRed = payload.shortageAlerts.some((a: any) => a.type === "RED");
+    const color = hasRed ? "#ef4444" : "#eab308";
+
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={6}
+        fill={color}
+        stroke="#fff"
+        strokeWidth={2}
+        style={{ cursor: "pointer" }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (payload?.week) setSelectedChartWeek(payload.week);
+        }}
+      />
+    );
+  };
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 pb-8 h-full min-h-[500px] items-start">
-      {/* Left Column: List of Changes */}
-      <div className="w-full md:w-1/3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden sticky top-6 max-h-[calc(100vh-2rem)] transition-colors">
-        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between transition-colors">
-          <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
-            <Clock className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
-            History Perubahan PPIC
-          </h2>
-          <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full">
-            {changedPlans.length}
-          </span>
-        </div>
-
-        <div className="flex-1 overflow-auto bg-slate-50/50 dark:bg-slate-900/50 p-3 space-y-3 transition-colors">
-          {changedPlans.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-slate-500 dark:text-slate-400 text-sm text-center px-4">
-              <Info className="w-8 h-8 mb-2 text-slate-300 dark:text-slate-600" />
-              <p>Belum ada rekaman perubahan Planning Style.</p>
-            </div>
-          ) : (
-            paginatedPlans.map((plan, idx) => {
-              const isSelected = selectedPlan === plan;
-              const isWarning = planMacroImpactMap.get(plan) || false;
-
-              return (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedPlan(plan)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all ${
-                    isSelected
-                      ? isWarning
-                        ? "bg-red-500 border-2 border-white text-white shadow-lg shadow-red-500/40 ring-2 ring-red-500 animate-pulse"
-                        : "bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700 shadow-sm ring-1 ring-indigo-300 dark:ring-indigo-700"
-                      : isWarning
-                        ? "bg-red-500 border-2 border-red-500 text-white hover:bg-red-600 shadow-md animate-pulse"
-                        : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm text-slate-800 dark:text-slate-200"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center space-x-2">
-                      <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded-md ${isWarning ? "bg-white/20 text-white" : "bg-slate-800 text-white"}`}
-                      >
-                        {plan.line}
-                      </span>
-                      <span
-                        className={`text-xs font-medium flex items-center ${isWarning ? "text-red-100" : "text-slate-500"}`}
-                      >
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {formatDate(plan.date)}
-                      </span>
-                    </div>
-                    {isWarning ? (
-                      <AlertTriangle
-                        className={`w-4 h-4 animate-pulse ${isSelected ? "text-white" : "text-white/80"}`}
-                      />
-                    ) : plan.isStyleChanged ? (
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    ) : (
-                      <Info className="w-4 h-4 text-blue-400" />
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <div
-                      className={`text-xs line-through ${isWarning ? "text-red-200" : "text-slate-500 dark:text-slate-400"}`}
-                    >
-                      {plan.historyDisplayStyle ||
-                        plan.historyStyle ||
-                        "Kosong"}
-                    </div>
-                    <div
-                      className={`flex items-center text-sm font-bold ${isWarning ? "text-white" : "text-slate-800 dark:text-slate-200"}`}
-                    >
-                      <ArrowRight
-                        className={`w-3 h-3 mr-1.5 ${isWarning ? "text-red-200" : "text-emerald-500"}`}
-                      />
-                      {plan.displayStyle || plan.style || "Kosong"}
-                    </div>
-                  </div>
-
-                  <div
-                    className={`mt-3 text-[10px] flex items-center justify-between ${isWarning ? "text-red-100" : "text-slate-400 dark:text-slate-500"}`}
-                  >
-                    <span>
-                      Terjadi perubahan planning setelah tanggal:{" "}
-                      {plan.snapshotDate ? formatDate(plan.snapshotDate) : "Unknown"}
-                    </span>
-                    <ChevronRight
-                      className={`w-4 h-4 ${isSelected ? (isWarning ? "text-white" : "text-indigo-500 dark:text-indigo-400") : isWarning ? "text-red-200" : "text-slate-300 dark:text-slate-600"}`}
-                    />
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Pagination Footer */}
-        {changedPlans.length > itemsPerPage && (
-          <div className="px-4 py-3 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+    <div className="flex flex-col gap-6 pb-8 h-full min-h-[500px]">
+      {/* Sub-tabs Navigation */}
+      <div className="border-b border-slate-200 dark:border-slate-800 pb-2 transition-colors">
+        <nav className="flex space-x-1 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg backdrop-blur-sm w-fit transition-colors">
+          <button
+            onClick={() => setActiveSubTab("makro")}
+            className={`px-4 sm:px-6 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+              activeSubTab === "makro"
+                ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
+            }`}
+          >
+            Dampak Perubahan Planning
+          </button>
+          <button
+            onClick={() => setActiveSubTab("detail")}
+            className={`px-4 sm:px-6 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+              activeSubTab === "detail"
+                ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
+            }`}
+          >
+            Detail Perubahan Planning
+          </button>
+        </nav>
       </div>
 
-      {/* Right Column */}
-      <div className="w-full md:w-2/3 flex flex-col gap-6 overflow-x-hidden min-w-0">
-        {/* 1. Macro Factory Impact Table */}
-        {factoryImpact && (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 md:p-6 shrink-0 transition-colors">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                  <Activity className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
-                  Dampak Terhadap Kebutuhan Mesin
-                </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                  Dampak perubahan planning PPIC pada rentang waktu
-                  <span className="font-semibold text-slate-700 dark:text-slate-300 mx-1">
-                    {formatDate(factoryImpact.startDate)}
-                  </span>
-                  hingga
-                  <span className="font-semibold text-slate-700 dark:text-slate-300 mx-1">
-                    {formatDate(factoryImpact.endDate)}
-                  </span>
-                  terhadap total kebutuhan mesin pabrik.
-                </p>
+      <div className="flex flex-col md:flex-row gap-6 items-start h-full w-full">
+        {activeSubTab === "detail" && (
+          <>
+            {/* Left Column: List of Changes */}
+            <div className="w-full md:w-1/3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden sticky top-6 max-h-[calc(100vh-2rem)] transition-colors">
+              <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between transition-colors">
+                <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                  <Clock className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
+                  History Perubahan PPIC
+                </h2>
+                <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                  {changedSnapshots.length}
+                </span>
               </div>
 
-              {factoryImpact.hasNewShortage && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-lg px-4 py-2 flex items-center shadow-sm">
-                  <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400 mr-2 shrink-0" />
-                  <div>
-                    <h4 className="text-xs font-bold text-red-800 dark:text-red-300">
-                      Peringatan!
-                    </h4>
-                    <p className="text-[11px] text-red-600 dark:text-red-400">
-                      Perubahan style pada rentang waktu ini menambah shortage
-                      mesin.
-                    </p>
+              <div className="flex-1 overflow-auto bg-slate-50/50 dark:bg-slate-900/50 p-3 space-y-3 transition-colors [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+                {changedSnapshots.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-40 text-slate-500 dark:text-slate-400 text-sm text-center px-4">
+                    <Info className="w-8 h-8 mb-2 text-slate-300 dark:text-slate-600" />
+                    <p>Belum ada rekaman perubahan Planning Style.</p>
                   </div>
+                ) : (
+                  paginatedSnapshots.map((snapshot, idx) => {
+                    const isSelected = selectedSnapshot === snapshot;
+                    const isMachineChange = !!snapshot.isMachineStyleChanged;
+
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => setSelectedSnapshot(snapshot)}
+                        className={`p-4 rounded-xl cursor-pointer transition-all ${
+                          isSelected
+                            ? isMachineChange
+                              ? "bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 dark:border-amber-500 shadow-sm ring-1 ring-amber-300 dark:ring-amber-600"
+                              : "bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-300 dark:border-indigo-700 shadow-sm ring-1 ring-indigo-300 dark:ring-indigo-700"
+                            : isMachineChange
+                              ? "bg-amber-50/50 dark:bg-amber-900/10 border border-amber-300 dark:border-amber-700 hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-sm"
+                              : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm text-slate-800 dark:text-slate-200"
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-800 dark:bg-slate-700 text-white">
+                              {snapshot.line}
+                            </span>
+                            <span className="text-xs font-medium flex items-center text-slate-500 dark:text-slate-400">
+                              <Calendar className="w-3 h-3 mr-1" />
+                              {formatDate(snapshot.planningDate)}
+                            </span>
+                          </div>
+                          {isMachineChange ? (
+                            <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                          ) : (
+                            <Info className="w-4 h-4 text-blue-400" />
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="text-xs line-through text-slate-500 dark:text-slate-400">
+                            {snapshot.lastPlanningStyle || "Kosong"}
+                          </div>
+                          <div className="flex items-center text-sm font-bold text-slate-800 dark:text-slate-200">
+                            <ArrowRight className="w-3 h-3 mr-1.5 text-emerald-500" />
+                            {snapshot.updatePlanningStyle || "Kosong"}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 text-[10px] flex items-center justify-between text-slate-400 dark:text-slate-500">
+                          <span>
+                            Snapshot: {snapshot.lastVersion || "?"} →{" "}
+                            {snapshot.updateVersion || "?"}
+                          </span>
+                          <ChevronRight
+                            className={`w-4 h-4 ${isSelected ? "text-indigo-500 dark:text-indigo-400" : "text-slate-300 dark:text-slate-600"}`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Pagination Footer */}
+              {changedSnapshots.length > itemsPerPage && (
+                <div className="px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 transition-colors">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
                 </div>
               )}
             </div>
 
-            <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm overflow-x-auto transition-colors">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Jenis Mesin</th>
-                    <th className="px-4 py-3 font-semibold text-center">
-                      Tersedia
-                    </th>
-                    <th className="px-4 py-3 font-semibold text-center text-slate-500 dark:text-slate-400">
-                      Kebutuhan Sebelum Perubahan Planning
-                    </th>
-                    <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400">
-                      Kebutuhan Setelah Perubahan Planning
-                    </th>
-                    <th className="px-4 py-3 font-semibold text-center text-slate-500 dark:text-slate-400">
-                      Gap Sebelum Perubahan
-                    </th>
-                    <th className="px-4 py-3 font-semibold text-center">
-                      Gap Setelah Perubahan
-                    </th>
-                    <th className="px-4 py-3 font-semibold text-center">
-                      Status Akhir
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
-                  {factoryImpact.comparison.map((row, i) => {
-                    let rowClass = "bg-white dark:bg-slate-900";
-                    let statusText = "Aman";
-                    let statusClass = "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30";
+            {/* --- DETAIL CONTENT (RIGHT COLUMN) --- */}
 
-                    if (row.isNowShortage) {
-                      rowClass = "bg-white dark:bg-slate-900";
-                      statusText = "Jadi Shortage!";
-                      statusClass = "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
-                    } else if (row.isWorseShortage) {
-                      rowClass = "bg-white dark:bg-slate-900";
-                      statusText = "Shortage Bertambah";
-                      statusClass = "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
-                    } else if (row.newGap < 0) {
-                      statusText = "Shortage (Tetap)";
-                      statusClass = "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
-                    }
+            <div className="w-full md:w-2/3 flex flex-col gap-6 overflow-x-hidden min-w-0">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden shrink-0 transition-colors">
+                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 transition-colors">
+                  <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                    <Activity className="w-5 h-5 mr-2 text-emerald-500 dark:text-emerald-400" />
+                    Detail Perubahan Kebutuhan Mesin
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Menganalisis apakah perubahan planning style menyebabkan
+                    lonjakan kebutuhan mesin yang signifikan
+                  </p>
+                </div>
 
-                    return (
-                      <tr
-                        key={i}
-                        className={`${rowClass} transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50`}
-                      >
-                        <td className="px-4 py-4 font-medium text-slate-800 dark:text-slate-200">
-                          {row.machine}
-                        </td>
-                        <td className="px-4 py-4 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors">
-                          {row.available}
-                        </td>
-                        <td className="px-4 py-4 text-center text-slate-400 dark:text-slate-500">
-                          {row.oldReq}
-                        </td>
-                        <td className="px-4 py-4 text-center font-bold text-indigo-700 dark:text-indigo-400 text-base">
-                          {row.newReq}
-                        </td>
-                        <td className="px-4 py-4 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors">
-                          {row.oldGap}
-                        </td>
-                        <td
-                          className={`px-4 py-4 text-center font-bold text-base ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
-                        >
-                          {row.newGap}
-                        </td>
-                        <td className="px-4 py-4 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle">
-                          <div
-                            className={`text-xs text-center leading-tight mx-auto px-2 py-1 rounded-md ${statusClass}`}
-                          >
-                            {statusText}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* 2. Detail Analysis per History Item */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden shrink-0 transition-colors">
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 transition-colors">
-            <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-emerald-500 dark:text-emerald-400" />
-              Detail Perubahan Kebutuhan Mesin
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Menganalisis apakah perubahan planning style menyebabkan lonjakan
-              kebutuhan mesin yang signifikan
-            </p>
-          </div>
-
-          <div className="flex-1 overflow-auto p-6">
-            {!selectedPlan ? (
-              <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
-                <Activity className="w-12 h-12 mb-3 text-slate-200 dark:text-slate-700" />
-                <p>
-                  Pilih riwayat perubahan di sebelah kiri untuk melihat
-                  dampaknya.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Context Header */}
-                <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between transition-colors">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                      Perubahan Plan Perhitungan Kebutuhan Mesin{" "}
-                      {selectedPlan.line} ({formatDate(selectedPlan.date)})
-                    </h3>
-                    <div className="flex items-center mt-2 text-xs text-slate-600 dark:text-slate-400 gap-2 flex-wrap">
-                      <span className="bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">
-                        Lama:{" "}
-                        <strong className="text-slate-700 dark:text-slate-300">
-                          {selectedPlan.historyStyle || "Kosong"}
-                        </strong>
-                      </span>
-                      <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                      <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400 px-2 py-1 rounded">
-                        Baru: <strong>{selectedPlan.style || "Kosong"}</strong>
-                      </span>
+                <div className="flex-1 overflow-auto p-6">
+                  {!selectedSnapshot ? (
+                    <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
+                      <Activity className="w-12 h-12 mb-3 text-slate-200 dark:text-slate-700" />
+                      <p>
+                        Pilih riwayat perubahan di sebelah kiri untuk melihat
+                        dampaknya.
+                      </p>
                     </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Context Header */}
+                      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between transition-colors">
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                            Perubahan Plan Perhitungan Kebutuhan Mesin{" "}
+                            {selectedSnapshot.line} (
+                            {formatDate(selectedSnapshot.planningDate)})
+                          </h3>
+                          <div className="flex items-center mt-2 text-xs text-slate-600 dark:text-slate-400 gap-2 flex-wrap">
+                            <span className="bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">
+                              Lama:{" "}
+                              <strong className="text-slate-700 dark:text-slate-300">
+                                {selectedSnapshot.lastMachineStyle || "Kosong"}
+                              </strong>
+                            </span>
+                            <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                            <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400 px-2 py-1 rounded">
+                              Baru:{" "}
+                              <strong>
+                                {selectedSnapshot.updateMachineStyle ||
+                                  "Kosong"}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {!selectedSnapshot.isMachineStyleChanged ? (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-lg p-5 flex items-start">
+                          <Info className="w-6 h-6 text-blue-500 dark:text-blue-400 mr-3 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-1">
+                              Aman, Hanya Penambahan/Pengurangan Style Planning
+                            </h4>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">
+                              Perubahan yang dilakukan oleh PPIC hanya sekadar
+                              menambah atau mengurangi{" "}
+                              <strong>Planning Style</strong>, tetapi tidak
+                              mengubah acuan{" "}
+                              <strong>
+                                Style yang digunakan dalam Perhitungan Kebutuhan
+                                Mesin
+                              </strong>
+                              . Oleh karena itu, kebutuhan mesin di pabrik sama
+                              sekali tidak terdampak.
+                            </p>
+                          </div>
+                        </div>
+                      ) : !impactAnalysis ||
+                        impactAnalysis.comparison.length === 0 ? (
+                        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-5 flex items-start">
+                          <AlertCircle className="w-6 h-6 text-slate-400 dark:text-slate-500 mr-3 shrink-0 mt-0.5" />
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
+                              Tidak Ada Data Kebutuhan
+                            </h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                              Sistem tidak dapat membandingkan kebutuhan karena
+                              data mesin untuk style ini belum terdaftar di
+                              database.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {impactAnalysis.hasCriticalImpact && (
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg p-4 flex items-center shadow-sm">
+                              <AlertTriangle className="w-6 h-6 text-amber-500 dark:text-amber-400 mr-4 shrink-0" />
+                              <div>
+                                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-1">
+                                  Peringatan: Kebutuhan Mesin Melonjak!
+                                </h4>
+                                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                                  Perubahan style ini membutuhkan{" "}
+                                  <strong>
+                                    mesin baru yang sebelumnya tidak disiapkan
+                                  </strong>{" "}
+                                  atau <strong>jumlah mesin tambahan</strong>.
+                                  Periksa tabel di bawah pada baris yang
+                                  ditandai merah/kuning untuk mengantisipasi{" "}
+                                  <em>shortage</em>.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm transition-colors">
+                            <table className="w-full text-sm text-left">
+                              <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
+                                <tr>
+                                  <th className="px-4 py-3 font-semibold">
+                                    Jenis Mesin
+                                  </th>
+                                  <th className="px-4 py-3 font-semibold text-center">
+                                    Kebutuhan Lama
+                                  </th>
+                                  <th className="px-4 py-3 font-semibold text-center">
+                                    Kebutuhan Baru
+                                  </th>
+                                  <th className="px-4 py-3 font-semibold text-center">
+                                    Selisih
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
+                                {impactAnalysis.comparison.map((row, i) => {
+                                  let rowClass = "bg-white dark:bg-slate-900";
+                                  let diffClass =
+                                    "text-slate-500 dark:text-slate-400";
+                                  let diffText = "Tetap";
+
+                                  if (row.isNew) {
+                                    rowClass = "bg-red-50 dark:bg-red-900/30";
+                                    diffClass =
+                                      "text-red-600 dark:text-red-400 font-bold";
+                                    diffText = `+${row.diff} (Mesin Baru)`;
+                                  } else if (row.isIncreased) {
+                                    rowClass =
+                                      "bg-amber-50 dark:bg-amber-900/30";
+                                    diffClass =
+                                      "text-amber-600 dark:text-amber-400 font-bold";
+                                    diffText = `+${row.diff} (Bertambah)`;
+                                  } else if (row.isDecreased) {
+                                    rowClass =
+                                      "bg-emerald-50 dark:bg-emerald-900/30";
+                                    diffClass =
+                                      "text-emerald-600 dark:text-emerald-400 font-medium";
+                                    diffText = `${row.diff} (Berkurang)`;
+                                  }
+
+                                  return (
+                                    <tr
+                                      key={i}
+                                      className={`${rowClass} transition-colors hover:brightness-95`}
+                                    >
+                                      <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
+                                        {row.machine}
+                                      </td>
+                                      <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
+                                        {row.oldReq || "-"}
+                                      </td>
+                                      <td className="px-4 py-3 text-center font-bold text-slate-800 dark:text-slate-200">
+                                        {row.newReq || "-"}
+                                      </td>
+                                      <td
+                                        className={`px-4 py-3 text-center text-xs ${diffClass}`}
+                                      >
+                                        {diffText}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+        {/* --- MAKRO CONTENT --- */}
+        {activeSubTab === "makro" && (
+          <div className="w-full flex flex-col gap-6 overflow-x-hidden min-w-0">
+            {/* 1. Macro Factory Impact Table */}
+            {factoryImpact && (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 md:p-6 shrink-0 transition-colors">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                      <Activity className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
+                      Dampak Perubahan Plan PPIC Terhadap Kebutuhan Mesin
+                    </h3>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                      Menampilkan perubahan kebutuhan mesin berdasarkan
+                      perubahan planning PPIC dari
+                      <span className="font-semibold text-slate-700 dark:text-slate-300 mx-1">
+                        {weeklyComparisonData.lastWeekCode}
+                        {weeklyComparisonData.lastSnapshotDateStr && (
+                          <span className="text-xs font-normal text-slate-500 dark:text-slate-400 ml-1">
+                            ({weeklyComparisonData.lastSnapshotDateStr})
+                          </span>
+                        )}
+                      </span>
+                      ke
+                      <span className="font-semibold text-slate-700 dark:text-slate-300 mx-1">
+                        {weeklyComparisonData.updateWeekCode}
+                        {weeklyComparisonData.updateSnapshotDateStr && (
+                          <span className="text-xs font-normal text-slate-500 dark:text-slate-400 ml-1">
+                            ({weeklyComparisonData.updateSnapshotDateStr})
+                          </span>
+                        )}
+                      </span>
+                    </p>
                   </div>
                 </div>
 
-                {!selectedPlan.isStyleChanged ? (
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-lg p-5 flex items-start">
-                    <Info className="w-6 h-6 text-blue-500 dark:text-blue-400 mr-3 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-1">
-                        Aman, Hanya Penambahan/Pengurangan Style Planning
-                      </h4>
-                      <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">
-                        Perubahan yang dilakukan oleh PPIC hanya sekadar
-                        menambah atau mengurangi <strong>Planning Style</strong>
-                        , tetapi tidak mengubah acuan{" "}
-                        <strong>
-                          Style yang digunakan dalam Perhitungan Kebutuhan Mesin
-                        </strong>
-                        . Oleh karena itu, kebutuhan mesin di pabrik sama sekali
-                        tidak terdampak.
-                      </p>
+                {/* Weekly Comparison Chart */}
+                {weeklyComparisonData.chartData.length > 0 && (
+                  <div className="mb-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <div className="flex items-center">
+                        <BarChart2 className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
+                        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                          Perbandingan Kebutuhan Mesin per Minggu
+                        </h4>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-slate-400" />
+                        <select
+                          value={chartMachineFilter}
+                          onChange={(e) =>
+                            setChartMachineFilter(e.target.value)
+                          }
+                          className="text-xs border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+                        >
+                          <option value="ALL">Semua Jenis Mesin</option>
+                          {allChartMachineTypes.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                  </div>
-                ) : !impactAnalysis ||
-                  impactAnalysis.comparison.length === 0 ? (
-                  <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-5 flex items-start">
-                    <AlertCircle className="w-6 h-6 text-slate-400 dark:text-slate-500 mr-3 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Tidak Ada Data Kebutuhan
-                      </h4>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Sistem tidak dapat membandingkan kebutuhan karena data
-                        mesin untuk style ini belum terdaftar di database.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {impactAnalysis.hasCriticalImpact && (
-                      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg p-4 flex items-center shadow-sm">
-                        <AlertTriangle className="w-6 h-6 text-amber-500 dark:text-amber-400 mr-4 shrink-0" />
-                        <div>
-                          <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-1">
-                            Peringatan: Kebutuhan Mesin Melonjak!
-                          </h4>
-                          <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                            Perubahan style ini membutuhkan{" "}
-                            <strong>
-                              mesin baru yang sebelumnya tidak disiapkan
-                            </strong>{" "}
-                            atau <strong>jumlah mesin tambahan</strong>. Periksa
-                            tabel di bawah pada baris yang ditandai merah/kuning
-                            untuk mengantisipasi <em>shortage</em>.
-                          </p>
+
+                    {weeklyComparisonData.alerts.length > 0 && (
+                      <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 mb-4 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+                        <div className="text-xs text-slate-700 dark:text-slate-300">
+                          <span className="font-bold">Shortage Alerts: </span>
+                          <div className="mt-1 flex flex-col gap-1">
+                            {weeklyComparisonData.alerts.map((a, i) => (
+                              <div key={i}>
+                                <strong>{a.week.split("-")[0]}</strong>:{" "}
+                                {a.shortageAlerts.map(
+                                  (alert: any, j: number) => (
+                                    <span
+                                      key={j}
+                                      className={`inline-block mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                        alert.type === "RED"
+                                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                          : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                      }`}
+                                    >
+                                      {alert.machine}
+                                    </span>
+                                  ),
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     )}
 
-                    <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm transition-colors">
-                      <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
-                          <tr>
-                            <th className="px-4 py-3 font-semibold">
-                              Jenis Mesin
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-center">
-                              Kebutuhan Lama
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-center">
-                              Kebutuhan Baru
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-center">
-                              Selisih
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
-                          {impactAnalysis.comparison.map((row, i) => {
-                            let rowClass = "bg-white dark:bg-slate-900";
-                            let diffClass = "text-slate-500 dark:text-slate-400";
-                            let diffText = "Tetap";
-
-                            if (row.isNew) {
-                              rowClass = "bg-red-50 dark:bg-red-900/30";
-                              diffClass = "text-red-600 dark:text-red-400 font-bold";
-                              diffText = `+${row.diff} (Mesin Baru)`;
-                            } else if (row.isIncreased) {
-                              rowClass = "bg-amber-50 dark:bg-amber-900/30";
-                              diffClass = "text-amber-600 dark:text-amber-400 font-bold";
-                              diffText = `+${row.diff} (Bertambah)`;
-                            } else if (row.isDecreased) {
-                              rowClass = "bg-emerald-50 dark:bg-emerald-900/30";
-                              diffClass = "text-emerald-600 dark:text-emerald-400 font-medium";
-                              diffText = `${row.diff} (Berkurang)`;
+                    <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 transition-colors">
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart
+                          data={weeklyComparisonData.chartData}
+                          margin={{ top: 35, right: 30, left: 10, bottom: 5 }}
+                          onClick={(e: any) => {
+                            if (!e) return;
+                            if (e.activePayload && e.activePayload.length > 0) {
+                              setSelectedChartWeek(
+                                e.activePayload[0].payload.week,
+                              );
+                            } else if (e.activeLabel) {
+                              setSelectedChartWeek(e.activeLabel);
+                            } else if (
+                              typeof e.activeTooltipIndex === "number" &&
+                              weeklyComparisonData.chartData[
+                                e.activeTooltipIndex
+                              ]
+                            ) {
+                              setSelectedChartWeek(
+                                weeklyComparisonData.chartData[
+                                  e.activeTooltipIndex
+                                ].week,
+                              );
                             }
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                          <XAxis
+                            dataKey="week"
+                            tick={{ fontSize: 11, fill: "#94a3b8" }}
+                            axisLine={{ stroke: "#e2e8f0" }}
+                            tickFormatter={(val) => String(val).split("-")[0]}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11, fill: "#94a3b8" }}
+                            axisLine={{ stroke: "#e2e8f0" }}
+                            label={{
+                              value: "Jumlah Mesin",
+                              angle: -90,
+                              position: "insideLeft",
+                              style: { fontSize: 11, fill: "#94a3b8" },
+                            }}
+                          />
+                          <Tooltip
+                            content={({ active, payload, label }: any) => {
+                              if (active && payload && payload.length) {
+                                const weekLabel = String(label).split("-")[0];
 
-                            return (
-                              <tr
-                                key={i}
-                                className={`${rowClass} transition-colors hover:brightness-95`}
-                              >
-                                <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
-                                  {row.machine}
-                                </td>
-                                <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
-                                  {row.oldReq || "-"}
-                                </td>
-                                <td className="px-4 py-3 text-center font-bold text-slate-800 dark:text-slate-200">
-                                  {row.newReq || "-"}
-                                </td>
-                                <td
-                                  className={`px-4 py-3 text-center text-xs ${diffClass}`}
-                                >
-                                  {diffText}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                return (
+                                  <div className="bg-slate-900/95 border border-indigo-500/30 rounded-lg p-3 text-xs text-slate-200 shadow-xl backdrop-blur-sm">
+                                    <p className="font-bold mb-2 text-white">
+                                      {weekLabel}
+                                    </p>
+                                    {payload.map((p: any, index: number) => {
+                                      const labels: Record<string, string> = {
+                                        lastPlan:
+                                          weeklyComparisonData.lastVersionLabel,
+                                        updatePlan:
+                                          weeklyComparisonData.updateVersionLabel,
+                                        available: "Tersedia",
+                                      };
+                                      return (
+                                        <p
+                                          key={index}
+                                          className="my-1 font-medium"
+                                          style={{ color: p.color }}
+                                        >
+                                          {labels[p.dataKey] || p.dataKey} :{" "}
+                                          {p.value}
+                                        </p>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="lastPlan"
+                            stroke="#ec4899"
+                            strokeWidth={2.5}
+                            dot={(dotProps: any) => {
+                              const { cx, cy, payload } = dotProps;
+                              return (
+                                <circle
+                                  key={`last-dot-${dotProps.key || cx}-${cy}`}
+                                  cx={cx}
+                                  cy={cy}
+                                  r={3.5}
+                                  fill="#ec4899"
+                                  stroke="#fff"
+                                  strokeWidth={1}
+                                  style={{ cursor: "pointer" }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (payload?.week)
+                                      setSelectedChartWeek(payload.week);
+                                  }}
+                                />
+                              );
+                            }}
+                            activeDot={{
+                              r: 6,
+                              stroke: "#ec4899",
+                              strokeWidth: 2,
+                              onClick: (_: any, event: any) => {
+                                const data = event?.payload;
+                                if (data?.week) setSelectedChartWeek(data.week);
+                              },
+                            }}
+                            name="lastPlan"
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="updatePlan"
+                            stroke="#3b82f6"
+                            strokeWidth={2.5}
+                            dot={renderAlertDot}
+                            activeDot={{
+                              r: 6,
+                              stroke: "#3b82f6",
+                              strokeWidth: 2,
+                              onClick: (_: any, event: any) => {
+                                const data = event?.payload;
+                                if (data?.week) setSelectedChartWeek(data.week);
+                              },
+                            }}
+                            name="updatePlan"
+                          />
+                          {chartMachineFilter !== "ALL" && (
+                            <Line
+                              type="monotone"
+                              dataKey="available"
+                              stroke="#ef4444"
+                              strokeWidth={2}
+                              strokeDasharray="4 4"
+                              dot={false}
+                              name="available"
+                            />
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
+
+                      <div className="flex items-center justify-center gap-4 mt-3 text-[10px] text-slate-500 dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <span className="w-4 h-0.5 bg-pink-500 inline-block" />
+                          {weeklyComparisonData.lastVersionLabel}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-4 h-0.5 bg-blue-500 inline-block" />
+                          {weeklyComparisonData.updateVersionLabel}
+                        </span>
+                        {chartMachineFilter !== "ALL" && (
+                          <span className="flex items-center gap-1">
+                            <span
+                              className="w-4 h-0.5 inline-block"
+                              style={{ borderTop: "2px dashed #ef4444" }}
+                            />
+                            Ketersediaan Mesin
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <span className="w-3 h-3 bg-red-500 rounded-full inline-block" />
+                          Tidak Shortage → Menjadi Shortage
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-3 h-3 bg-amber-500 rounded-full inline-block" />
+                          Shortage → Shortage Bertambah
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
+
+                {/* Week selector dropdown */}
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                    Detail Minggu:
+                  </span>
+                  <select
+                    value={selectedChartWeek || ""}
+                    onChange={(e) => setSelectedChartWeek(e.target.value)}
+                    className="text-xs font-semibold border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors cursor-pointer shadow-sm"
+                  >
+                    {weeklyComparisonData.chartData.map((d) => {
+                      const weekShort = String(d.week).split("-")[0];
+                      const hasAlert =
+                        d.shortageAlerts && d.shortageAlerts.length > 0;
+                      return (
+                        <option key={d.week} value={d.week}>
+                          {weekShort} {hasAlert ? "⚠️ (Ada Shortage)" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {selectedChartWeek && selectedWeekMachineData.length > 0 ? (
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm overflow-x-auto transition-colors">
+                    <table className="w-full min-w-[760px] text-sm text-left">
+                      <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[160px]">
+                            Jenis Mesin
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-center text-red-600 dark:text-red-400 whitespace-nowrap min-w-[80px]">
+                            Tersedia
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-center text-pink-600 dark:text-pink-400 min-w-[150px]">
+                            <div>Kebutuhan</div>
+                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
+                              ({weeklyComparisonData.lastVersionLabel})
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-center text-blue-600 dark:text-blue-400 min-w-[150px]">
+                            <div>Kebutuhan</div>
+                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
+                              ({weeklyComparisonData.updateVersionLabel})
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-center text-slate-500 dark:text-slate-400 min-w-[150px]">
+                            <div>Gap</div>
+                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
+                              ({weeklyComparisonData.lastVersionLabel})
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-center min-w-[150px]">
+                            <div>Gap</div>
+                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
+                              ({weeklyComparisonData.updateVersionLabel})
+                            </div>
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[110px]">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
+                        {selectedWeekMachineData.map((row, i) => {
+                          let statusText = "Aman";
+                          let statusClass =
+                            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30";
+
+                          if (row.isNowShortage) {
+                            statusText = "Menjadi Shortage!";
+                            statusClass =
+                              "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
+                          } else if (row.isWorseShortage) {
+                            statusText = "Tambah Shortage";
+                            statusClass =
+                              "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
+                          } else if (row.newGap < 0 && row.oldGap < 0) {
+                            statusText = "Shortage (Tetap)";
+                            statusClass =
+                              "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
+                          } else if (row.newGap < 0) {
+                            statusText = "Shortage";
+                            statusClass =
+                              "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
+                          }
+
+                          return (
+                            <tr
+                              key={i}
+                              className="bg-white dark:bg-slate-900 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50"
+                            >
+                              <td className="px-4 py-4 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                                {row.machine}
+                              </td>
+                              <td className="px-4 py-4 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors whitespace-nowrap">
+                                {row.available}
+                              </td>
+                              <td className="px-4 py-4 text-center text-pink-600 dark:text-pink-400 whitespace-nowrap">
+                                {row.lastReq}
+                              </td>
+                              <td className="px-4 py-4 text-center font-bold text-indigo-700 dark:text-indigo-400 text-base whitespace-nowrap">
+                                {row.updateReq}
+                              </td>
+                              <td className="px-4 py-4 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors whitespace-nowrap">
+                                {row.oldGap}
+                              </td>
+                              <td
+                                className={`px-4 py-4 text-center font-bold text-base whitespace-nowrap ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
+                              >
+                                {row.newGap}
+                              </td>
+                              <td className="px-4 py-4 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle whitespace-nowrap">
+                                <div
+                                  className={`text-xs text-center leading-tight mx-auto px-2 py-1 rounded-md whitespace-nowrap ${statusClass}`}
+                                >
+                                  {statusText}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : selectedChartWeek ? (
+                  <div className="text-center py-8 text-sm text-slate-400 dark:text-slate-500">
+                    Tidak ada data mesin pada{" "}
+                    {String(selectedChartWeek).split("-")[0]}.
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
 };
+export default HistoryLayout;

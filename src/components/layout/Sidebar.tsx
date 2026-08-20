@@ -1,0 +1,65 @@
+import React from "react";
+import {
+  LayoutDashboard,
+  TableProperties,
+  Clock,
+  BarChart2,
+} from "lucide-react";
+
+export type TabValue = "summary" | "detail" | "history" | "chart";
+
+interface SidebarProps {
+  activeTab: TabValue;
+  onTabChange: (tab: TabValue) => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
+  const menuItems: { id: TabValue; label: string; icon: React.ReactNode }[] = [
+    { id: "summary", label: "Summary", icon: <LayoutDashboard className="w-5 h-5" /> },
+    { id: "detail", label: "Detail", icon: <TableProperties className="w-5 h-5" /> },
+    { id: "history", label: "History PPIC", icon: <Clock className="w-5 h-5" /> },
+    { id: "chart", label: "Analytics", icon: <BarChart2 className="w-5 h-5" /> },
+  ];
+
+  return (
+    <div className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 hidden lg:flex flex-col flex-shrink-0 transition-colors">
+      <div className="p-4 flex-1">
+        <h3 className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4 px-3">
+          Menu
+        </h3>
+        <nav className="space-y-1.5">
+          {menuItems.map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onTabChange(item.id)}
+                className={`w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative overflow-hidden ${
+                  isActive
+                    ? "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+              >
+                {/* Active Indicator Line (Left) */}
+                {isActive && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500" />
+                )}
+                
+                <span
+                  className={`mr-3 ${
+                    isActive
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-slate-400 group-hover:text-slate-500 dark:group-hover:text-slate-300"
+                  }`}
+                >
+                  {item.icon}
+                </span>
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    </div>
+  );
+};

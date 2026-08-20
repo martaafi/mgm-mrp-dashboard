@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { fetchAllMRPData } from "./utils/googleSheetsAPI";
 import {
   ProductionPlan,
+  SnapshotRecord,
   MachineRequirementPerStyle,
   MachineAvailability,
   FilterState,
@@ -18,7 +19,8 @@ import { FilterBar } from "./components/filters/FilterBar";
 import { OverallRequirementTable } from "./components/dashboard/OverallRequirementTable";
 import { DetailLayout } from "./components/dashboard/DetailLayout";
 import { HistoryLayout } from "./components/dashboard/HistoryLayout";
-
+import { ChartDashboard } from "./components/dashboard/ChartDashboard";
+import { Sidebar } from "./components/layout/Sidebar";
 import { KPICards } from "./components/dashboard/KPICards";
 import { MachineDrillDownModal } from "./components/modals/MachineDrillDownModal";
 import { DataManagerModal } from "./components/modals/DataManagerModal";
@@ -34,6 +36,7 @@ export default function App() {
   const [availabilities, setAvailabilities] = useState<MachineAvailability[]>(
     [],
   );
+  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -51,6 +54,7 @@ export default function App() {
       setPlans(data.plans);
       setRequirements(data.requirements);
       setAvailabilities(data.availabilities);
+      setSnapshots(data.snapshots);
       setLastUpdated(data.lastUpdated);
     } catch (err: any) {
       setError(err.message || "Failed to load data from Google Sheets");
@@ -88,19 +92,19 @@ export default function App() {
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
 
   // 4. Tab State
-  const [activeTab, setActiveTab] = useState<"summary" | "detail" | "history">(
-    "summary",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "summary" | "detail" | "history" | "chart"
+  >("summary");
 
   // 5. Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check local storage or system preference
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('darkMode');
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("darkMode");
       if (saved !== null) {
-        return saved === 'true';
+        return saved === "true";
       }
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
     }
     return false;
   });
@@ -111,11 +115,11 @@ export default function App() {
 
   useEffect(() => {
     if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('darkMode', 'true');
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("darkMode", "true");
     } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('darkMode', 'false');
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("darkMode", "false");
     }
   }, [isDarkMode]);
 
@@ -199,48 +203,55 @@ export default function App() {
               <div className="flex-1 h-10 bg-slate-200 dark:bg-slate-700/50 rounded-md"></div>
               <div className="flex-1 h-10 bg-slate-200 dark:bg-slate-700/50 rounded-md"></div>
               <div className="flex-1 h-10 bg-slate-200 dark:bg-slate-700/50 rounded-md"></div>
+              <div className="flex-1 h-10 bg-slate-200 dark:bg-slate-700/50 rounded-md"></div>
             </div>
           </div>
 
           <div className="flex-1 min-w-0 flex flex-col gap-4">
             {/* Filter Bar Skeleton */}
             <div className="h-[76px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 flex items-center gap-4">
-               <div className="w-32 h-5 bg-slate-200 dark:bg-slate-700 rounded"></div>
-               <div className="flex-1 flex gap-2">
-                 <div className="w-32 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
-                 <div className="w-32 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
-               </div>
+              <div className="w-32 h-5 bg-slate-200 dark:bg-slate-700 rounded"></div>
+              <div className="flex-1 flex gap-2">
+                <div className="w-32 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+                <div className="w-32 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+              </div>
             </div>
 
             {/* KPI Cards Skeleton */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="h-32 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 flex flex-col justify-between">
-                   <div className="flex justify-between items-center">
-                     <div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div>
-                     <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
-                   </div>
-                   <div className="w-16 h-8 bg-slate-200 dark:bg-slate-700 rounded"></div>
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="h-32 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 flex flex-col justify-between"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="w-24 h-4 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                    <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg"></div>
+                  </div>
+                  <div className="w-16 h-8 bg-slate-200 dark:bg-slate-700 rounded"></div>
                 </div>
               ))}
             </div>
 
             {/* Table Skeleton */}
             <div className="flex-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5">
-               <div className="flex justify-between items-center mb-6">
-                 <div>
-                   <div className="w-48 h-5 bg-slate-200 dark:bg-slate-700 rounded mb-2"></div>
-                   <div className="w-32 h-3 bg-slate-200 dark:bg-slate-700 rounded"></div>
-                 </div>
-                 <div className="w-64 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg hidden sm:block"></div>
-               </div>
-               
-               <div className="space-y-3">
-                 <div className="w-full h-8 bg-slate-100 dark:bg-slate-800/80 rounded"></div>
-                 {[1, 2, 3, 4, 5, 6].map(i => (
-                   <div key={i} className="w-full h-12 bg-slate-50 dark:bg-slate-800/40 rounded"></div>
-                 ))}
-               </div>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <div className="w-48 h-5 bg-slate-200 dark:bg-slate-700 rounded mb-2"></div>
+                  <div className="w-32 h-3 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                </div>
+                <div className="w-64 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg hidden sm:block"></div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="w-full h-8 bg-slate-100 dark:bg-slate-800/80 rounded"></div>
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div
+                    key={i}
+                    className="w-full h-12 bg-slate-50 dark:bg-slate-800/40 rounded"
+                  ></div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -280,45 +291,11 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-4">
-        {/* Horizontal Tabs Navigation */}
-        <div className="border-b border-slate-200 dark:border-slate-800 pb-2 transition-colors">
-          <nav className="flex space-x-1 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg backdrop-blur-sm w-full transition-colors">
-            <button
-              onClick={() => setActiveTab("summary")}
-              className={`flex-1 px-4 sm:px-6 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
-                activeTab === "summary"
-                  ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
-              }`}
-            >
-              Summary
-            </button>
-            <button
-              onClick={() => setActiveTab("detail")}
-              className={`flex-1 px-4 sm:px-6 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
-                activeTab === "detail"
-                  ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
-              }`}
-            >
-              Detail Layout
-            </button>
-            <button
-              onClick={() => setActiveTab("history")}
-              className={`flex-1 px-4 sm:px-6 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
-                activeTab === "history"
-                  ? "bg-emerald-500 text-white shadow-md ring-1 ring-emerald-600/50"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-800/50"
-              }`}
-            >
-              History
-            </button>
-          </nav>
-        </div>
+      <div className="flex-1 w-full flex overflow-hidden">
+        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Content Area */}
-        <main className="flex-1 min-w-0 flex flex-col gap-0.5">
+        <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950">
+          <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4 min-h-full">
           {/* Global Filter Bar (Visible only on summary tab) */}
           {activeTab === "summary" && (
             <FilterBar
@@ -358,12 +335,22 @@ export default function App() {
 
           {activeTab === "history" && (
             <HistoryLayout
-              filteredPlans={plans}
+              snapshots={snapshots}
+              plans={plans}
               requirements={requirements}
               availabilities={availabilities}
             />
           )}
-        </main>
+
+          {activeTab === "chart" && (
+            <ChartDashboard
+              plans={plans}
+              requirements={requirements}
+              availabilities={availabilities}
+            />
+          )}
+          </main>
+        </div>
       </div>
 
       {/* Footer */}
