@@ -234,7 +234,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                       color: "#f8fafc",
                     }}
                     cursor={{ fill: "rgba(51, 65, 85, 0.1)" }}
-                    formatter={(value: any, _name: string, props: any) => [
+                    formatter={(value: any, _name: any, props: any) => [
                       `${value} unit (${(props.payload.percent * 100).toFixed(1)}%)`,
                       props.payload.name,
                     ]}
@@ -243,7 +243,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                     <LabelList 
                       dataKey="percent" 
                       position="top" 
-                      formatter={(val: number) => val > 0.01 ? `${(val * 100).toFixed(0)}%` : ''} 
+                      formatter={(val: any) => val > 0.01 ? `${(val * 100).toFixed(0)}%` : ''} 
                       style={{ fontSize: "10px", fill: "#64748b", fontWeight: "600" }} 
                     />
                     {machineTypeComposition.map((_, index) => (
@@ -267,7 +267,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                     cy="50%"
                     outerRadius={80}
                     dataKey="value"
-                    label={({ name, percent }) => percent > 0.02 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''}
+                    label={({ name, percent }) => (percent || 0) > 0.02 ? `${name} (${((percent || 0) * 100).toFixed(0)}%)` : ''}
                     labelLine={true}
                     style={{ fontSize: "11px", fontWeight: "500" }}
                   >
@@ -285,7 +285,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                       borderRadius: "8px",
                       color: "#f8fafc",
                     }}
-                    formatter={(value: any, name: string, props: any) => [
+                    formatter={(value: any, name: any, props: any) => [
                       `${value} unit (${(props.payload.percent * 100).toFixed(1)}%)`,
                       name,
                     ]}
