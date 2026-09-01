@@ -27,14 +27,19 @@ import {
   SnapshotRecord,
   MachineRequirementPerStyle,
   MachineAvailability,
+  RentalTrialRecord,
 } from "../../types/mrp";
-import { calculateMachineRequirements } from "../../utils/mrpCalculations";
+import {
+  calculateMachineRequirements,
+  getAdjustedAvailabilityForDateRange,
+} from "../../utils/mrpCalculations";
 
 interface HistoryLayoutProps {
   snapshots: SnapshotRecord[];
   plans: ProductionPlan[];
   requirements: MachineRequirementPerStyle[];
   availabilities: MachineAvailability[];
+  rentalTrialRecords: RentalTrialRecord[];
 }
 
 export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
@@ -42,6 +47,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   plans,
   requirements,
   availabilities,
+  rentalTrialRecords,
 }) => {
   // Format date helper: YYYY-MM-DD -> DD MMM YYYY
   const formatDate = (dateString: string) => {
@@ -409,9 +415,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         available: number;
         shortageAlerts: {
           machine: string;
-          type: "RED" | "YELLOW";
+          type: "RED" | "ORANGE" | "SLATE";
           lastReq?: number;
           updateReq?: number;
+          availCount?: number;
         }[];
       }
     > = {};
@@ -502,17 +509,41 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         });
       });
 
-      // Check if any machine has update > last AND is in shortage
+      // Check if any machine is in shortage or became a shortage
+      const minDate =
+        dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : "";
+      const maxDate =
+        dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : "";
+
+      const weeklyAvailabilities =
+        minDate && maxDate
+          ? getAdjustedAvailabilityForDateRange(
+              minDate,
+              maxDate,
+              availabilities,
+              rentalTrialRecords,
+            )
+          : availabilities;
+
       if (weekSnapshots.length > 0) {
         Object.entries(machineMaxUpdate).forEach(([machine, updateCount]) => {
           const lastCount = machineMaxLast[machine] || 0;
-          if (updateCount > lastCount) {
-            const avail = availabilities.find(
-              (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
-            );
-            if (avail && updateCount > avail.jumlahMesin) {
-              const alertType =
-                lastCount <= avail.jumlahMesin ? "RED" : "YELLOW";
+          const avail = weeklyAvailabilities.find(
+            (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
+          );
+          const availCount = avail ? avail.jumlahMesin : 0;
+
+          if (avail && updateCount > availCount) {
+            let alertType = "";
+            if (lastCount <= availCount) {
+              alertType = "RED"; // Awalnya ga shortage, jadi shortage
+            } else if (updateCount > lastCount) {
+              alertType = "ORANGE"; // Shortage bertambah
+            } else if (updateCount === lastCount) {
+              alertType = "SLATE"; // Shortage tetap
+            }
+
+            if (alertType) {
               if (
                 !weekMap[weekLabel].shortageAlerts.some(
                   (a) => a.machine === machine,
@@ -520,9 +551,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
               ) {
                 weekMap[weekLabel].shortageAlerts.push({
                   machine,
-                  type: alertType,
+                  type: alertType as "RED" | "ORANGE" | "SLATE",
                   lastReq: lastCount,
                   updateReq: updateCount,
+                  availCount: availCount,
                 });
               }
             }
@@ -531,16 +563,48 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       }
     });
 
-    // Step 4: Available line for filtered machine
-    if (chartMachineFilter !== "ALL") {
-      const avail = availabilities.find(
-        (a) => a.jenisMesin.toLowerCase() === chartMachineFilter.toLowerCase(),
-      );
-      const availCount = avail ? avail.jumlahMesin : 0;
-      Object.keys(weekMap).forEach((w) => {
-        weekMap[w].available = availCount;
-      });
-    }
+    // Step 4: Available line for filtered machine or all machines
+    const allRequiredMachinesForChart = new Set<string>();
+    futureSnapshots.forEach((s) => {
+      requirements
+        .filter((r) => r.style === s.lastMachineStyle)
+        .forEach((r) => allRequiredMachinesForChart.add(r.jenisMesin));
+      requirements
+        .filter((r) => r.style === s.updateMachineStyle)
+        .forEach((r) => allRequiredMachinesForChart.add(r.jenisMesin));
+    });
+
+    Object.keys(weekMap).forEach((w) => {
+      const dates = weekDates[w] || [];
+      const minDate =
+        dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : "";
+      const maxDate =
+        dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : "";
+
+      const weeklyAvailabilities =
+        minDate && maxDate
+          ? getAdjustedAvailabilityForDateRange(
+              minDate,
+              maxDate,
+              availabilities,
+              rentalTrialRecords,
+            )
+          : availabilities;
+
+      let availCount = 0;
+      if (chartMachineFilter !== "ALL") {
+        const avail = weeklyAvailabilities.find(
+          (a) =>
+            a.jenisMesin.toLowerCase() === chartMachineFilter.toLowerCase(),
+        );
+        availCount = avail ? avail.jumlahMesin : 0;
+      } else {
+        availCount = weeklyAvailabilities
+          .filter((a) => allRequiredMachinesForChart.has(a.jenisMesin))
+          .reduce((sum, a) => sum + (a.jumlahMesin || 0), 0);
+      }
+      weekMap[w].available = availCount;
+    });
 
     // Step 5: Sort weeks and build output
     const sortedWeeks = Object.keys(weekMap).sort((a, b) => {
@@ -553,12 +617,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     });
 
     const chartData = sortedWeeks.map((w) => {
-      // Filter shortage alerts based on the selected machine filter
-      const filteredAlerts = weekMap[w].shortageAlerts.filter(
-        (a) =>
-          chartMachineFilter === "ALL" ||
-          a.machine.toLowerCase() === chartMachineFilter.toLowerCase(),
-      );
+      // Do not filter shortage alerts by selected machine, always show all shortages
+      const filteredAlerts = weekMap[w].shortageAlerts;
 
       return {
         week: w,
@@ -639,6 +699,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     availabilities,
     chartMachineFilter,
     selectedSnapshot,
+    rentalTrialRecords,
   ]);
 
   // Auto-select first week when chart data is available
@@ -707,6 +768,21 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       });
     });
 
+    const minDate =
+      weekDates.length > 0 ? weekDates.reduce((a, b) => (a < b ? a : b)) : "";
+    const maxDate =
+      weekDates.length > 0 ? weekDates.reduce((a, b) => (a > b ? a : b)) : "";
+
+    const weeklyAvailabilities =
+      minDate && maxDate
+        ? getAdjustedAvailabilityForDateRange(
+            minDate,
+            maxDate,
+            availabilities,
+            rentalTrialRecords,
+          )
+        : availabilities;
+
     // Build per-machine comparison
     const allMachines = new Set([
       ...Object.keys(machineMaxLast),
@@ -718,7 +794,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         const lastReq = machineMaxLast[machine] || 0;
         const updateReq = machineMaxUpdate[machine] || 0;
         const available =
-          availabilities.find(
+          weeklyAvailabilities.find(
             (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
           )?.jumlahMesin || 0;
 
@@ -750,7 +826,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         if (pA !== pB) return pA - pB;
         return a.newGap - b.newGap;
       });
-  }, [selectedChartWeek, snapshots, requirements, availabilities]);
+  }, [
+    selectedChartWeek,
+    snapshots,
+    requirements,
+    availabilities,
+    rentalTrialRecords,
+  ]);
 
   // Custom dot renderer for shortage alerts
   const renderAlertDot = (props: any) => {
@@ -778,7 +860,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     }
 
     const hasRed = payload.shortageAlerts.some((a: any) => a.type === "RED");
-    const color = hasRed ? "#ef4444" : "#eab308";
+    const hasOrange = payload.shortageAlerts.some((a: any) => a.type === "ORANGE");
+    
+    let color = "#94a3b8"; // Default slate (Shortage Tetap)
+    if (hasRed) color = "#ef4444";
+    else if (hasOrange) color = "#eab308";
 
     return (
       <circle
@@ -1191,9 +1277,25 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                     {weeklyComparisonData.alerts.length > 0 && (
                       <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 mb-4 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                        <div className="text-xs text-slate-700 dark:text-slate-300">
-                          <span className="font-bold">Shortage Alerts: </span>
-                          <div className="mt-1 flex flex-col gap-1">
+                        <div className="text-xs text-slate-700 dark:text-slate-300 w-full">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2">
+                            <span className="font-bold">Shortage Alerts:</span>
+                            <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-red-400"></span>{" "}
+                                Tidak Shortage → Menjadi Shortage
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-orange-400"></span>{" "}
+                                Shortage Bertambah
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-slate-400"></span>{" "}
+                                Shortage Tetap
+                              </span>
+                            </div>
+                          </div>
+                          <div className="grid grid-rows-5 grid-flow-col gap-x-3 gap-y-1.5 overflow-x-auto pb-1 justify-start items-start">
                             {weeklyComparisonData.alerts.map((a, i) => (
                               <div key={i}>
                                 <strong>{a.week.split("-")[0]}</strong>:{" "}
@@ -1201,10 +1303,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                   (alert: any, j: number) => (
                                     <span
                                       key={j}
-                                      className={`inline-block mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                      title={`Before: ${alert.lastReq}, After: ${alert.updateReq} (Kapasitas: ${alert.availCount})`}
+                                      className={`inline-block mr-1.5 mb-1.5 px-2 py-1 rounded text-[10px] font-semibold border cursor-help ${
                                         alert.type === "RED"
-                                          ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                                          : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                          ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50"
+                                          : alert.type === "ORANGE"
+                                            ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50"
+                                            : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
                                       }`}
                                     >
                                       {alert.machine}
@@ -1351,17 +1456,15 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                             }}
                             name="updatePlan"
                           />
-                          {chartMachineFilter !== "ALL" && (
-                            <Line
-                              type="monotone"
-                              dataKey="available"
-                              stroke="#ef4444"
-                              strokeWidth={2}
-                              strokeDasharray="4 4"
-                              dot={false}
-                              name="available"
-                            />
-                          )}
+                          <Line
+                            type="monotone"
+                            dataKey="available"
+                            stroke="#ef4444"
+                            strokeWidth={2}
+                            strokeDasharray="4 4"
+                            dot={false}
+                            name="available"
+                          />
                         </LineChart>
                       </ResponsiveContainer>
 
@@ -1374,22 +1477,24 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           <span className="w-4 h-0.5 bg-blue-500 inline-block" />
                           {weeklyComparisonData.updateVersionLabel}
                         </span>
-                        {chartMachineFilter !== "ALL" && (
-                          <span className="flex items-center gap-1">
-                            <span
-                              className="w-4 h-0.5 inline-block"
-                              style={{ borderTop: "2px dashed #ef4444" }}
-                            />
-                            Ketersediaan Mesin
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1">
+                          <span
+                            className="w-4 h-0.5 inline-block"
+                            style={{ borderTop: "2px dashed #ef4444" }}
+                          />
+                          Ketersediaan Mesin
+                        </span>
                         <span className="flex items-center gap-1">
                           <span className="w-3 h-3 bg-red-500 rounded-full inline-block" />
                           Tidak Shortage → Menjadi Shortage
                         </span>
                         <span className="flex items-center gap-1">
-                          <span className="w-3 h-3 bg-amber-500 rounded-full inline-block" />
-                          Shortage → Shortage Bertambah
+                          <span className="w-3 h-3 bg-orange-500 rounded-full inline-block" />
+                          Shortage Bertambah
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-3 h-3 bg-slate-400 rounded-full inline-block" />
+                          Shortage Tetap
                         </span>
                       </div>
                     </div>
@@ -1461,7 +1566,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
                         {selectedWeekMachineData.map((row, i) => {
-                          let statusText = "Aman";
+                          let statusText = "OK";
                           let statusClass =
                             "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30";
 
@@ -1470,11 +1575,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                             statusClass =
                               "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
                           } else if (row.isWorseShortage) {
-                            statusText = "Tambah Shortage";
+                            statusText = "Shortage Bertambah";
                             statusClass =
                               "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
                           } else if (row.newGap < 0 && row.oldGap < 0) {
-                            statusText = "Shortage (Tetap)";
+                            statusText = "Shortage Tetap";
                             statusClass =
                               "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
                           } else if (row.newGap < 0) {
@@ -1519,6 +1624,53 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           );
                         })}
                       </tbody>
+                      <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-200 dark:border-slate-700">
+                        <tr>
+                          <td className="px-4 py-4 text-slate-800 dark:text-slate-200 whitespace-nowrap text-left uppercase tracking-wider text-xs">
+                            Total
+                          </td>
+                          <td className="px-4 py-4 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            {selectedWeekMachineData.reduce(
+                              (acc, r) => acc + r.available,
+                              0,
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-center text-pink-700 dark:text-pink-400 whitespace-nowrap">
+                            {selectedWeekMachineData.reduce(
+                              (acc, r) => acc + r.lastReq,
+                              0,
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-center text-indigo-700 dark:text-indigo-400 whitespace-nowrap text-base">
+                            {selectedWeekMachineData.reduce(
+                              (acc, r) => acc + r.updateReq,
+                              0,
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-center text-slate-600 dark:text-slate-400 whitespace-nowrap border-l border-slate-100 dark:border-slate-800">
+                            {selectedWeekMachineData.reduce(
+                              (acc, r) => acc + r.oldGap,
+                              0,
+                            )}
+                          </td>
+                          <td
+                            className={`px-4 py-4 text-center whitespace-nowrap text-base ${
+                              selectedWeekMachineData.reduce(
+                                (acc, r) => acc + r.newGap,
+                                0,
+                              ) < 0
+                                ? "text-red-600 dark:text-red-500"
+                                : "text-emerald-600 dark:text-emerald-500"
+                            }`}
+                          >
+                            {selectedWeekMachineData.reduce(
+                              (acc, r) => acc + r.newGap,
+                              0,
+                            )}
+                          </td>
+                          <td className="px-4 py-4 border-l border-slate-100 dark:border-slate-800"></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 ) : selectedChartWeek ? (

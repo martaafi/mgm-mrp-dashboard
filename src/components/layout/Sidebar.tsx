@@ -4,21 +4,54 @@ import {
   TableProperties,
   Clock,
   BarChart2,
+  Bell,
 } from "lucide-react";
 
-export type TabValue = "summary" | "detail" | "history" | "chart";
+export type TabValue = "summary" | "detail" | "history" | "chart" | "alerts";
 
 interface SidebarProps {
   activeTab: TabValue;
   onTabChange: (tab: TabValue) => void;
+  alertCount?: number;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
-  const menuItems: { id: TabValue; label: string; icon: React.ReactNode }[] = [
-    { id: "summary", label: "Summary", icon: <LayoutDashboard className="w-5 h-5" /> },
-    { id: "detail", label: "Detail", icon: <TableProperties className="w-5 h-5" /> },
-    { id: "history", label: "History PPIC", icon: <Clock className="w-5 h-5" /> },
-    { id: "chart", label: "Analytics", icon: <BarChart2 className="w-5 h-5" /> },
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onTabChange,
+  alertCount = 0,
+}) => {
+  const menuItems: {
+    id: TabValue;
+    label: string;
+    icon: React.ReactNode;
+    badge?: number;
+  }[] = [
+    {
+      id: "summary",
+      label: "Summary",
+      icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      id: "detail",
+      label: "Detail",
+      icon: <TableProperties className="w-5 h-5" />,
+    },
+    {
+      id: "history",
+      label: "History PPIC",
+      icon: <Clock className="w-5 h-5" />,
+    },
+    {
+      id: "chart",
+      label: "Analytics",
+      icon: <BarChart2 className="w-5 h-5" />,
+    },
+    {
+      id: "alerts",
+      label: "Rental Alerts",
+      icon: <Bell className="w-5 h-5" />,
+      badge: alertCount,
+    },
   ];
 
   return (
@@ -44,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
                 {isActive && (
                   <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500" />
                 )}
-                
+
                 <span
                   className={`mr-3 ${
                     isActive
@@ -55,6 +88,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
                   {item.icon}
                 </span>
                 {item.label}
+
+                {/* Notification Badge */}
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold bg-red-500 text-white shadow-sm animate-pulse">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}

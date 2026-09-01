@@ -5,6 +5,8 @@ import {
   SnapshotRecord,
   MachineRequirementPerStyle,
   MachineAvailability,
+  RentalTrialRecord,
+  InventoryRecord,
   FilterState,
 } from "./types/mrp";
 import {
@@ -12,6 +14,8 @@ import {
   calculateMachineRequirements,
   buildLineMachineMatrix,
   getMachineDrillDown,
+  getRentalTrialAlerts,
+  getAdjustedAvailabilityForDateRange,
 } from "./utils/mrpCalculations";
 import { exportMRPToExcel, exportSummaryToCSV } from "./utils/exportUtils";
 import { Header } from "./components/layout/Header";
@@ -26,6 +30,7 @@ import { MachineDrillDownModal } from "./components/modals/MachineDrillDownModal
 import { DataManagerModal } from "./components/modals/DataManagerModal";
 import { PrintableReportModal } from "./components/modals/PrintableReportModal";
 import { IEAssistantModal } from "./components/modals/IEAssistantModal";
+import { RentalAlertsDashboard } from "./components/dashboard/RentalAlertsDashboard";
 
 export default function App() {
   // 1. Core Data States
@@ -37,6 +42,8 @@ export default function App() {
     [],
   );
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
+  const [rentalTrialRecords, setRentalTrialRecords] = useState<RentalTrialRecord[]>([]);
+  const [inventoryRecords, setInventoryRecords] = useState<InventoryRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -55,6 +62,8 @@ export default function App() {
       setRequirements(data.requirements);
       setAvailabilities(data.availabilities);
       setSnapshots(data.snapshots);
+      setRentalTrialRecords(data.rentalTrialRecords || []);
+      setInventoryRecords(data.inventoryRecords || []);
       setLastUpdated(data.lastUpdated);
     } catch (err: any) {
       setError(err.message || "Failed to load data from Google Sheets");
@@ -80,9 +89,16 @@ export default function App() {
     return `${year}-${month}-${day}`;
   };
 
+  // Summary filters (Default: Today)
   const [filters, setFilters] = useState<FilterState>({
     startDate: getTodayStr(),
     endDate: getTodayStr(),
+  });
+
+  // Chart / Analytics filters (Default: Empty = Overall/Semua Tanggal)
+  const [chartFilters, setChartFilters] = useState<FilterState>({
+    startDate: "",
+    endDate: "",
   });
 
   // 3. Modal / Navigation States
@@ -93,7 +109,7 @@ export default function App() {
 
   // 4. Tab State
   const [activeTab, setActiveTab] = useState<
-    "summary" | "detail" | "history" | "chart"
+    "summary" | "detail" | "history" | "chart" | "alerts"
   >("summary");
 
   // 5. Dark Mode State
@@ -123,7 +139,6 @@ export default function App() {
     }
   }, [isDarkMode]);
 
-  // Filter handlers
   const handleFilterChange = (key: keyof FilterState, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
@@ -135,16 +150,46 @@ export default function App() {
     });
   };
 
-  // 4. Derived Calculations
+  const handleChartFilterChange = (key: keyof FilterState, value: string) => {
+    setChartFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleResetChartFilters = () => {
+    setChartFilters({
+      startDate: "",
+      endDate: "",
+    });
+  };
+
+  // 4. Derived Calculations for Summary Tab
   const filteredPlans = useMemo(
     () => filterProductionPlans(plans, filters),
     [plans, filters],
   );
 
+  const adjustedAvailabilities = useMemo(() => {
+    return getAdjustedAvailabilityForDateRange(filters.startDate, filters.endDate, availabilities, rentalTrialRecords);
+  }, [filters.startDate, filters.endDate, availabilities, rentalTrialRecords]);
+
+  // Derived Calculations for Chart/Analytics Tab (Unfiltered by default)
+  const chartFilteredPlans = useMemo(
+    () => filterProductionPlans(plans, chartFilters),
+    [plans, chartFilters],
+  );
+
+  const chartAdjustedAvailabilities = useMemo(() => {
+    return getAdjustedAvailabilityForDateRange(
+      chartFilters.startDate,
+      chartFilters.endDate,
+      availabilities,
+      rentalTrialRecords,
+    );
+  }, [chartFilters.startDate, chartFilters.endDate, availabilities, rentalTrialRecords]);
+
   const summaryData = useMemo(
     () =>
-      calculateMachineRequirements(filteredPlans, requirements, availabilities),
-    [filteredPlans, requirements, availabilities],
+      calculateMachineRequirements(filteredPlans, requirements, adjustedAvailabilities),
+    [filteredPlans, requirements, adjustedAvailabilities],
   );
 
   const lineMatrix = useMemo(
@@ -173,6 +218,12 @@ export default function App() {
     if (filters.endDate) parts.push(`End: ${filters.endDate}`);
     return parts.length > 0 ? parts.join(", ") : "Semua Tanggal";
   }, [filters]);
+
+  // Calculate alert count for sidebar badge
+  const rentalTrialAlertCount = useMemo(
+    () => getRentalTrialAlerts(rentalTrialRecords, 7).length,
+    [rentalTrialRecords]
+  );
 
   // Reset to default benchmark data handler
   const handleResetData = () => {
@@ -292,16 +343,26 @@ export default function App() {
 
       {/* Main Container */}
       <div className="flex-1 w-full flex overflow-hidden">
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} alertCount={rentalTrialAlertCount} />
 
         <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950">
           <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4 min-h-full">
-          {/* Global Filter Bar (Visible only on summary tab) */}
+          {/* Filter Bar for Summary Tab */}
           {activeTab === "summary" && (
             <FilterBar
               filters={filters}
               onFilterChange={handleFilterChange}
               onResetFilters={handleResetFilters}
+              lastUpdated={lastUpdated}
+            />
+          )}
+
+          {/* Filter Bar for Analytics / Chart Tab (Defaults to Overall) */}
+          {activeTab === "chart" && (
+            <FilterBar
+              filters={chartFilters}
+              onFilterChange={handleChartFilterChange}
+              onResetFilters={handleResetChartFilters}
               lastUpdated={lastUpdated}
             />
           )}
@@ -329,6 +390,7 @@ export default function App() {
               plans={plans}
               requirements={requirements}
               availabilities={availabilities}
+              rentalTrialRecords={rentalTrialRecords}
               initialDate={filters.startDate}
             />
           )}
@@ -339,14 +401,24 @@ export default function App() {
               plans={plans}
               requirements={requirements}
               availabilities={availabilities}
+              rentalTrialRecords={rentalTrialRecords}
             />
           )}
 
           {activeTab === "chart" && (
             <ChartDashboard
-              plans={plans}
+              plans={chartFilteredPlans}
               requirements={requirements}
-              availabilities={availabilities}
+              availabilities={chartAdjustedAvailabilities}
+              rentalTrialRecords={rentalTrialRecords}
+              inventoryRecords={inventoryRecords}
+              filters={chartFilters}
+            />
+          )}
+
+          {activeTab === "alerts" && (
+            <RentalAlertsDashboard
+              rentalTrialRecords={rentalTrialRecords}
             />
           )}
           </main>

@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { format } from "date-fns";
 import {
   Search,
   ArrowUpDown,
@@ -7,6 +9,7 @@ import {
   AlertTriangle,
   ArrowUp,
   ArrowDown,
+  Info,
 } from "lucide-react";
 import { MachineRequirementSummary } from "../../types/mrp";
 
@@ -23,6 +26,11 @@ export const OverallRequirementTable: React.FC<
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<SortField>("gap");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [tooltipState, setTooltipState] = useState<{
+    details: NonNullable<MachineRequirementSummary["variationDetails"]>;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -226,14 +234,30 @@ export const OverallRequirementTable: React.FC<
                   className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
                 >
                   <td className="py-3.5 px-4 sm:px-6">
-                    <div>
+                    <div className="flex items-center space-x-1.5">
                       <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         {item.machine}
                       </div>
+                      {item.variationDetails && item.variationDetails.length > 0 && (
+                        <div 
+                          className="flex items-center"
+                          onMouseEnter={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setTooltipState({
+                              details: item.variationDetails!,
+                              x: rect.left + rect.width / 2,
+                              y: rect.top,
+                            });
+                          }}
+                          onMouseLeave={() => setTooltipState(null)}
+                        >
+                          <Info className="w-4 h-4 text-blue-500 cursor-help" />
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200 text-base">
-                    {(item.baseCount ?? 0) + (item.pinjamCount || 0) + (item.sewaCount || 0)}
+                    {(item.baseCount ?? 0) + (item.pinjamCount || 0) + (item.sewaCount || 0) + (item.trialCount || 0)}
                   </td>
                   <td className="py-3.5 px-4 text-center">
                     <div className="flex flex-col items-center justify-center gap-1">
@@ -248,6 +272,11 @@ export const OverallRequirementTable: React.FC<
                       {(item.sewaCount || 0) > 0 && (
                         <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-amber-500 rounded-full shadow-sm leading-none w-max">
                           +{item.sewaCount} sewa
+                        </span>
+                      )}
+                      {(item.trialCount || 0) > 0 && (
+                        <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-indigo-500 rounded-full shadow-sm leading-none w-max">
+                          +{item.trialCount} trial
                         </span>
                       )}
                     </div>
@@ -319,6 +348,41 @@ export const OverallRequirementTable: React.FC<
           </tbody>
         </table>
       </div>
+      
+      {/* Portal for Tooltip to escape overflow: hidden */}
+      {tooltipState && createPortal(
+        <div 
+          className="fixed z-[100] w-64 p-3 bg-slate-800 text-xs text-white rounded shadow-lg text-left font-normal space-y-2 pointer-events-none"
+          style={{
+            top: tooltipState.y - 8,
+            left: tooltipState.x,
+            transform: "translate(-50%, -100%)"
+          }}
+        >
+          <div className="font-bold border-b border-slate-600 pb-1 mb-1">
+            Rincian Ketersediaan:
+          </div>
+          {tooltipState.details.map((detail, idx) => (
+            <div key={idx} className="flex flex-col gap-0.5">
+              <div className="flex justify-between items-start">
+                <span className="text-slate-300">
+                  {detail.startDate === detail.endDate
+                    ? format(new Date(detail.startDate), "dd MMM yyyy")
+                    : `${format(new Date(detail.startDate), "dd MMM yyyy")} s/d ${format(new Date(detail.endDate), "dd MMM yyyy")}`}
+                </span>
+                <span className="font-bold">{detail.jumlahMesin} msn</span>
+              </div>
+              {detail.expiredRecords && detail.expiredRecords.map((rec, rIdx) => (
+                <span key={rIdx} className="text-[10px] text-amber-300 ml-2">
+                  ↳ {rec.count} {rec.type} hbs tgl {format(new Date(rec.date), "dd MMM yyyy")}
+                </span>
+              ))}
+            </div>
+          ))}
+          <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-slate-800"></div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

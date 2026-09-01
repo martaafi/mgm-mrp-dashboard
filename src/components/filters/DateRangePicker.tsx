@@ -1,7 +1,25 @@
 import React, { useState, useRef, useEffect } from "react";
-import { format, isSameMonth, addMonths, subMonths, isWithinInterval, isSameDay, isBefore, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, getISOWeek } from "date-fns";
+import {
+  format,
+  isSameMonth,
+  addMonths,
+  subMonths,
+  isWithinInterval,
+  isSameDay,
+  isBefore,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  addDays,
+  getISOWeek,
+} from "date-fns";
 import { enUS } from "date-fns/locale";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
 interface DateRangePickerProps {
   startDate: string; // YYYY-MM-DD
@@ -18,18 +36,25 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(
-    startDate ? new Date(startDate) : new Date()
+    startDate ? new Date(startDate) : new Date(),
   );
-  
+
   // Temporary selection state for when the popup is open
-  const [tempStart, setTempStart] = useState<Date | null>(startDate ? new Date(startDate) : null);
-  const [tempEnd, setTempEnd] = useState<Date | null>(endDate ? new Date(endDate) : null);
-  
+  const [tempStart, setTempStart] = useState<Date | null>(
+    startDate ? new Date(startDate) : null,
+  );
+  const [tempEnd, setTempEnd] = useState<Date | null>(
+    endDate ? new Date(endDate) : null,
+  );
+
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -71,13 +96,19 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   const renderHeader = () => {
     return (
       <div className="bg-white border-b border-slate-100 text-slate-800 py-2 px-3 flex justify-between items-center rounded-t-lg">
-        <button onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+        <button
+          onClick={prevMonth}
+          className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+        >
           <ChevronLeft className="w-4 h-4 text-slate-500 hover:text-slate-800" />
         </button>
         <span className="font-semibold text-[13px]">
           {format(currentMonth, "MMMM yyyy", { locale: enUS })}
         </span>
-        <button onClick={nextMonth} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+        <button
+          onClick={nextMonth}
+          className="p-1 hover:bg-slate-100 rounded-full transition-colors"
+        >
           <ChevronRight className="w-4 h-4 text-slate-500 hover:text-slate-800" />
         </button>
       </div>
@@ -124,7 +155,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     while (day <= endDateRange) {
       const weekStartDay = new Date(day);
       const isoWeekNum = getISOWeek(weekStartDay);
-      
+
       const weekCell = (
         <div
           key={`week-${isoWeekNum}`}
@@ -140,43 +171,65 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         formattedDate = format(day, dateFormat);
         const cloneDay = new Date(day);
         const isCurrentMonth = isSameMonth(day, monthStart);
-        
+
         // Selection logic
         const isSelectedStart = tempStart ? isSameDay(day, tempStart) : false;
         const isSelectedEnd = tempEnd ? isSameDay(day, tempEnd) : false;
-        const isInRange = tempStart && tempEnd ? isWithinInterval(day, { start: tempStart, end: tempEnd }) : false;
-        
-        let cellClasses = "flex items-center justify-center h-7 w-full text-xs font-medium cursor-pointer transition-colors relative z-10 ";
+        const isInRange =
+          tempStart && tempEnd
+            ? isWithinInterval(day, { start: tempStart, end: tempEnd })
+            : false;
+
+        let cellClasses =
+          "flex items-center justify-center h-7 w-full text-xs font-medium cursor-pointer transition-colors relative z-10 ";
         let wrapperClasses = "relative h-7 ";
-        
+
         if (!isCurrentMonth) {
           cellClasses += "text-slate-300 ";
         } else {
-          cellClasses += "text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded ";
+          cellClasses +=
+            "text-slate-700 hover:bg-slate-100 hover:text-slate-900 rounded ";
         }
-        
+
         // Range backgrounds
         if (isInRange && !isSelectedStart && !isSelectedEnd) {
-           wrapperClasses += "bg-slate-200 "; // Neutral background
-           cellClasses = cellClasses.replace("hover:bg-slate-100", "hover:bg-slate-300");
+          wrapperClasses += "bg-slate-200 "; // Neutral background
+          cellClasses = cellClasses.replace(
+            "hover:bg-slate-100",
+            "hover:bg-slate-300",
+          );
         }
-        
+
         if (isSelectedStart) {
-          wrapperClasses += tempStart && tempEnd && !isSameDay(tempStart, tempEnd) ? "bg-slate-200 rounded-l-md " : "";
-          cellClasses = "flex items-center justify-center h-7 w-full text-xs font-bold cursor-pointer relative z-10 bg-slate-800 text-white rounded-md shadow-sm";
+          wrapperClasses +=
+            tempStart && tempEnd && !isSameDay(tempStart, tempEnd)
+              ? "bg-slate-200 rounded-l-md "
+              : "";
+          cellClasses =
+            "flex items-center justify-center h-7 w-full text-xs font-bold cursor-pointer relative z-10 bg-slate-800 text-white rounded-md shadow-sm";
         }
-        
-        if (isSelectedEnd && tempStart && tempEnd && !isSameDay(tempStart, tempEnd)) {
+
+        if (
+          isSelectedEnd &&
+          tempStart &&
+          tempEnd &&
+          !isSameDay(tempStart, tempEnd)
+        ) {
           wrapperClasses += tempStart ? "bg-slate-200 rounded-r-md " : "";
-          cellClasses = "flex items-center justify-center h-7 w-full text-xs font-bold cursor-pointer relative z-10 bg-slate-800 text-white rounded-md shadow-sm";
+          cellClasses =
+            "flex items-center justify-center h-7 w-full text-xs font-bold cursor-pointer relative z-10 bg-slate-800 text-white rounded-md shadow-sm";
         }
 
         days.push(
-          <div key={day.toString()} className={wrapperClasses} onClick={() => handleDateClick(cloneDay)}>
+          <div
+            key={day.toString()}
+            className={wrapperClasses}
+            onClick={() => handleDateClick(cloneDay)}
+          >
             <div className={cellClasses}>
               <span>{formattedDate}</span>
             </div>
-          </div>
+          </div>,
         );
         day = addDays(day, 1);
       }
@@ -184,7 +237,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         <div className="grid grid-cols-8 gap-0 px-2 mt-1" key={day.toString()}>
           {weekCell}
           {days}
-        </div>
+        </div>,
       );
       days = [];
     }
@@ -195,7 +248,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     if (!d) return "Select date";
     return format(new Date(d), "dd MMM yyyy", { locale: enUS });
   };
-  
+
   const formatRangeText = () => {
     if (!tempStart) return "Select start date";
     if (!tempEnd) return `from ${format(tempStart, "d MMMM")}`;
@@ -212,9 +265,9 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         <div className="flex items-center">
           <CalendarIcon className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2" />
           <span className="font-medium">
-            {startDate && endDate 
+            {startDate && endDate
               ? `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`
-              : "Select date range"}
+              : "Pilih Tanggal"}
           </span>
         </div>
       </button>
@@ -225,20 +278,20 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
           {renderHeader()}
           {renderDays()}
           {renderCells()}
-          
+
           {/* Footer Action */}
           <div className="bg-slate-50 border-t border-slate-100 p-2.5">
             <div className="text-slate-700 text-[11px] mb-2 font-medium capitalize">
               {formatRangeText()}
             </div>
             <div className="flex space-x-2">
-              <button 
+              <button
                 onClick={() => setIsOpen(false)}
                 className="flex-1 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 rounded transition-colors"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleApply}
                 disabled={!tempStart}
                 className="flex-1 py-1.5 text-xs font-bold text-white bg-slate-800 rounded shadow-sm hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

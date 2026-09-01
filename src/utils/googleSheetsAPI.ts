@@ -5,6 +5,8 @@ import {
   SnapshotRecord,
   MachineRequirementPerStyle,
   MachineAvailability,
+  RentalTrialRecord,
+  InventoryRecord,
 } from "../types/mrp";
 import { format } from "date-fns";
 
@@ -140,7 +142,7 @@ export const fetchMachineRequirements = async (): Promise<
     const kebutuhanSpare = parseFloat(row[5] || "0") || 0;
     const kebutuhanAccessories = parseFloat(row[6] || "0") || 0;
 
-    if (!style || !jenisMesin) continue;
+    if (!style || !jenisMesin || jenisMesin.toLowerCase() === "total") continue;
 
     requirements.push({
       style,
@@ -167,15 +169,16 @@ export const fetchAvailability = async (): Promise<MachineAvailability[]> => {
 
     let rawDate = parseDateString(row[0] || "");
 
-    const jenisMesin = row[1] || "";
-    const jumlahMesin = parseFloat(row[2]) || 0;
+    const jenisMesin = row[3] || "";
+    const jumlahMesin = parseFloat(row[4]) || 0;
 
-    if (!jenisMesin) continue;
+    if (!jenisMesin || jenisMesin.toLowerCase() === "total") continue;
 
     // Read Pinjam and Sewa from Col D (3) and Col E (4) if they exist
-    const pinjamCount = parseFloat(row[3]) || 0;
-    const sewaCount = parseFloat(row[4]) || 0;
-    const totalCount = jumlahMesin + pinjamCount + sewaCount;
+    const pinjamCount = parseFloat(row[5]) || 0;
+    const sewaCount = parseFloat(row[6]) || 0;
+    const trialCount = parseFloat(row[7]) || 0;
+    const totalCount = jumlahMesin + pinjamCount + sewaCount + trialCount;
 
     availabilities.push({
       date: rawDate,
@@ -184,10 +187,112 @@ export const fetchAvailability = async (): Promise<MachineAvailability[]> => {
       baseCount: jumlahMesin,
       pinjamCount: pinjamCount,
       sewaCount: sewaCount,
+      trialCount: trialCount,
     });
   }
 
   return availabilities;
+};
+
+export const fetchRentalTrialData = async (): Promise<RentalTrialRecord[]> => {
+  const data = await fetchCSVArray("Mesin Sewa & Trial");
+  const records: RentalTrialRecord[] = [];
+
+  // Row 0 is header.
+  // Col A(0): Helper Jenis, Col B(1): NO, Col C(2): JENIS,
+  // Col D(3): ENTRY DATE, Col E(4): TGL SELESAI, Col F(5): TGL KELUAR,
+  // Col G(6): INVOICE/SJ, Col H(7): BRAND, Col I(8): NAMA MESIN,
+  // Col J(9): TIPE MESIN, Col K(10): SERIAL NUMBER, Col L(11): REMARK
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length < 4) continue;
+
+    const helperJenis = (row[0] || "").toString().trim();
+    if (!helperJenis) continue;
+
+    const no = parseInt(row[1]) || 0;
+    const jenis = (row[2] || "").toString().trim();
+    const entryDate = parseDateString(row[3] || "");
+    const tglSelesai = parseDateString(row[4] || "");
+    const invoice = (row[6] || "").toString().trim();
+    const brand = (row[7] || "").toString().trim();
+    const namaMesin = (row[8] || "").toString().trim();
+    const tipeMesin = (row[9] || "").toString().trim();
+    const serialNumber = (row[10] || "").toString().trim();
+    const remark = (row[11] || "").toString().trim();
+    const inventory1 = (row[12] || "").toString().trim();
+    const inventory2 = (row[13] || "").toString().trim();
+
+    records.push({
+      helperJenis,
+      no,
+      jenis,
+      entryDate,
+      tglSelesai,
+      invoice,
+      brand,
+      namaMesin,
+      tipeMesin,
+      serialNumber,
+      inventory1,
+      inventory2,
+      remark,
+    });
+  }
+
+  return records;
+};
+
+/**
+ * Parse UMUR string like "0 thn 9 bln" or "2 thn 3 bln" into total months.
+ */
+const parseUmur = (umurStr: string): number => {
+  if (!umurStr) return 0;
+  let totalMonths = 0;
+  const thnMatch = umurStr.match(/(\d+)\s*thn/i);
+  const blnMatch = umurStr.match(/(\d+)\s*bln/i);
+  if (thnMatch) totalMonths += parseInt(thnMatch[1]) * 12;
+  if (blnMatch) totalMonths += parseInt(blnMatch[1]);
+  return totalMonths;
+};
+
+export const fetchInventoryData = async (): Promise<InventoryRecord[]> => {
+  const data = await fetchCSVArray("Inventory");
+  const records: InventoryRecord[] = [];
+
+  // Row 0 is header.
+  // Col A(0): Helper Jenis, Col B(1): JENIS, Col C(2): ENTRY DATE PA,
+  // Col D(3): INVOICE, Col E(4): BRAND, Col F(5): NAMA MESIN,
+  // Col G(6): TIPE MESIN, Col H(7): SERIAL NUMBER, Col I(8): REMARK,
+  // Col J(9): INVENTORY 1, Col K(10): INVENTORY 2, Col L(11): ALOKASI, Col M(12): UMUR
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length < 3) continue;
+
+    const helperJenis = (row[0] || "").toString().trim();
+    if (!helperJenis) continue;
+
+    const umurRaw = (row[12] || "").toString().trim();
+
+    records.push({
+      helperJenis,
+      jenis: (row[1] || "").toString().trim(),
+      entryDatePA: parseDateString(row[2] || ""),
+      invoice: (row[3] || "").toString().trim(),
+      brand: (row[4] || "").toString().trim(),
+      namaMesin: (row[5] || "").toString().trim(),
+      tipeMesin: (row[6] || "").toString().trim(),
+      serialNumber: (row[7] || "").toString().trim(),
+      remark: (row[8] || "").toString().trim(),
+      inventory1: (row[9] || "").toString().trim(),
+      inventory2: (row[10] || "").toString().trim(),
+      alokasi: (row[11] || "").toString().trim(),
+      umur: umurRaw,
+      umurBulan: parseUmur(umurRaw),
+    });
+  }
+
+  return records;
 };
 
 const CACHE_KEYS = {
@@ -195,6 +300,8 @@ const CACHE_KEYS = {
   REQ: "mrp_cache_machine_reqs",
   AVAILABILITIES: "mrp_cache_availabilities",
   SNAPSHOTS: "mrp_cache_snapshots",
+  RENTAL_TRIAL: "mrp_cache_rental_trial",
+  INVENTORY: "mrp_cache_inventory",
   TIMESTAMP: "mrp_cache_timestamp",
 };
 
@@ -203,6 +310,8 @@ export interface FetchMRPDataResult {
   requirements: MachineRequirementPerStyle[];
   availabilities: MachineAvailability[];
   snapshots: SnapshotRecord[];
+  rentalTrialRecords: RentalTrialRecord[];
+  inventoryRecords: InventoryRecord[];
   isCached: boolean;
   lastUpdated: string;
 }
@@ -216,9 +325,19 @@ export const fetchAllMRPData = async (
       const cachedReqs = localStorage.getItem(CACHE_KEYS.REQ);
       const cachedAvail = localStorage.getItem(CACHE_KEYS.AVAILABILITIES);
       const cachedSnapshots = localStorage.getItem(CACHE_KEYS.SNAPSHOTS);
+      const cachedRentalTrial = localStorage.getItem(CACHE_KEYS.RENTAL_TRIAL);
+      const cachedInventory = localStorage.getItem(CACHE_KEYS.INVENTORY);
       const cachedTime = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
 
-      if (cachedPlans && cachedReqs && cachedAvail && cachedSnapshots && cachedTime) {
+      if (
+        cachedPlans &&
+        cachedReqs &&
+        cachedAvail &&
+        cachedSnapshots &&
+        cachedRentalTrial &&
+        cachedInventory &&
+        cachedTime
+      ) {
         let parsedAvail = JSON.parse(cachedAvail);
 
         // Ensure backward compatibility with cached data
@@ -227,6 +346,7 @@ export const fetchAllMRPData = async (
           baseCount: a.baseCount ?? a.jumlahMesin ?? 0,
           pinjamCount: a.pinjamCount ?? 0,
           sewaCount: a.sewaCount ?? 0,
+          trialCount: a.trialCount ?? 0,
           jumlahMesin: a.jumlahMesin ?? 0,
         }));
 
@@ -235,6 +355,8 @@ export const fetchAllMRPData = async (
           requirements: JSON.parse(cachedReqs),
           availabilities: parsedAvail,
           snapshots: JSON.parse(cachedSnapshots),
+          rentalTrialRecords: JSON.parse(cachedRentalTrial),
+          inventoryRecords: JSON.parse(cachedInventory),
           isCached: true,
           lastUpdated: cachedTime,
         };
@@ -244,11 +366,13 @@ export const fetchAllMRPData = async (
     }
   }
 
-  const [plans, requirements, availabilities, snapshots] = await Promise.all([
+  const [plans, requirements, availabilities, snapshots, rentalTrialRecords, inventoryRecords] = await Promise.all([
     fetchPlans(),
     fetchMachineRequirements(),
     fetchAvailability(),
     fetchSnapshots(),
+    fetchRentalTrialData(),
+    fetchInventoryData(),
   ]);
 
   const lastUpdated = format(new Date(), "dd MMM yyyy HH:mm:ss");
@@ -261,6 +385,8 @@ export const fetchAllMRPData = async (
       JSON.stringify(availabilities),
     );
     localStorage.setItem(CACHE_KEYS.SNAPSHOTS, JSON.stringify(snapshots));
+    localStorage.setItem(CACHE_KEYS.RENTAL_TRIAL, JSON.stringify(rentalTrialRecords));
+    localStorage.setItem(CACHE_KEYS.INVENTORY, JSON.stringify(inventoryRecords));
     localStorage.setItem(CACHE_KEYS.TIMESTAMP, lastUpdated);
   } catch (e) {
     console.warn("Failed to save to localStorage cache:", e);
@@ -271,6 +397,8 @@ export const fetchAllMRPData = async (
     requirements,
     availabilities,
     snapshots,
+    rentalTrialRecords,
+    inventoryRecords,
     isCached: false,
     lastUpdated,
   };

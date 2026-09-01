@@ -172,7 +172,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
 
   const handleAvailChange = (
     jenisMesin: string,
-    type: "pinjam" | "sewa",
+    type: "pinjam" | "sewa" | "trial",
     newCount: number,
   ) => {
     onUpdateAvailabilities(
@@ -182,11 +182,13 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
           if (type === "pinjam")
             updatedItem.pinjamCount = Math.max(0, newCount);
           if (type === "sewa") updatedItem.sewaCount = Math.max(0, newCount);
+          if (type === "trial") updatedItem.trialCount = Math.max(0, newCount);
 
           updatedItem.jumlahMesin =
             (updatedItem.baseCount ?? 0) +
             (updatedItem.pinjamCount ?? 0) +
-            (updatedItem.sewaCount ?? 0);
+            (updatedItem.sewaCount ?? 0) +
+            (updatedItem.trialCount ?? 0);
           return updatedItem;
         }
         return item;
@@ -588,6 +590,7 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                       </th>
                       <th className="p-3 text-right">Pinjam (Internal)</th>
                       <th className="p-3 text-right">Sewa</th>
+                      <th className="p-3 text-right">Trial</th>
                       <th className="p-3 text-right text-indigo-700 dark:text-indigo-400">
                         Total Mesin
                       </th>
@@ -629,6 +632,21 @@ export const DataManagerModal: React.FC<DataManagerModalProps> = ({
                               handleAvailChange(
                                 item.jenisMesin,
                                 "sewa",
+                                Number(e.target.value) || 0,
+                              )
+                            }
+                            className="w-16 text-right bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-indigo-600 dark:focus:border-indigo-400 shadow-sm transition-colors"
+                          />
+                        </td>
+                        <td className="p-3 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={item.trialCount ?? 0}
+                            onChange={(e) =>
+                              handleAvailChange(
+                                item.jenisMesin,
+                                "trial",
                                 Number(e.target.value) || 0,
                               )
                             }

@@ -1,5 +1,5 @@
 import React from "react";
-import { Wrench, PackageCheck, AlertTriangle } from "lucide-react";
+import { Wrench, PackageCheck, AlertTriangle, Info } from "lucide-react";
 import { format } from "date-fns";
 import { MachineRequirementSummary } from "../../types/mrp";
 
@@ -20,6 +20,13 @@ export const KPICards: React.FC<KPICardsProps> = ({
     (acc, curr) => acc + curr.available,
     0,
   );
+  
+  const totalMaxAvailable = summaryData.reduce(
+    (acc, curr) => acc + (curr.maxAvailable !== undefined ? curr.maxAvailable : curr.available),
+    0,
+  );
+  
+  const hasVariation = totalMaxAvailable > totalAvailable;
 
   // GAP
   const totalGap = totalAvailable - totalRequired;
@@ -40,12 +47,23 @@ export const KPICards: React.FC<KPICardsProps> = ({
             <PackageCheck className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-          {totalAvailable.toLocaleString()}
+        <div className="flex items-center space-x-2">
+          <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+            {totalAvailable.toLocaleString()}
+          </div>
+          {hasVariation && (
+            <div className="group relative flex items-center">
+              <Info className="w-5 h-5 text-blue-200 cursor-help" />
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-xs text-white rounded shadow-lg z-10 text-center">
+                Jumlah terendah dalam periode ini. Tertinggi: {totalMaxAvailable.toLocaleString()} mesin.
+                <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-slate-800"></div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="mt-auto pt-2">
           <p className="text-xs text-blue-100">
-            Data ketersediaan mesin per tanggal {formattedDate}
+            {hasVariation ? "Nilai minimum ketersediaan mesin" : `Data ketersediaan mesin per tanggal ${formattedDate}`}
           </p>
         </div>
       </div>

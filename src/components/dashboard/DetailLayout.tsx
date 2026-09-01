@@ -5,12 +5,15 @@ import {
   ProductionPlan,
   MachineRequirementPerStyle,
   MachineAvailability,
+  RentalTrialRecord,
 } from "../../types/mrp";
+import { getAdjustedAvailabilityForDate } from "../../utils/mrpCalculations";
 
 interface DetailLayoutProps {
   plans: ProductionPlan[];
   requirements: MachineRequirementPerStyle[];
   availabilities: MachineAvailability[];
+  rentalTrialRecords?: RentalTrialRecord[];
   initialDate?: string;
 }
 
@@ -18,6 +21,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
   plans,
   requirements,
   availabilities,
+  rentalTrialRecords = [],
   initialDate,
 }) => {
   // Use initialDate if provided, otherwise default to today's date in YYYY-MM-DD
@@ -56,8 +60,11 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
 
   // 2. Prepare machine rows
   const tableData = useMemo(() => {
+    // Adjust availability for the selected date (subtract expired rental/trial machines)
+    const adjustedAvail = getAdjustedAvailabilityForDate(selectedDate, availabilities, rentalTrialRecords);
+
     // Collect all machine types
-    const machineTypes = new Set(availabilities.map((a) => a.jenisMesin));
+    const machineTypes = new Set(adjustedAvail.map((a) => a.jenisMesin));
 
     // Also include any machines required by active styles just in case they aren't in availabilities
     const reqLookup: Record<string, number> = {};
@@ -87,13 +94,14 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
     const rows = Array.from(machineTypes)
       .sort((a, b) => a.localeCompare(b))
       .map((machine) => {
-        const avail = availabilities.find(
+        const avail = adjustedAvail.find(
           (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
         );
         const baseCount = avail?.baseCount || 0;
         const pinjamCount = avail?.pinjamCount || 0;
         const sewaCount = avail?.sewaCount || 0;
-        const totalMesin = avail?.jumlahMesin || 0; // base + pinjam + sewa
+        const trialCount = avail?.trialCount || 0;
+        const totalMesin = avail?.jumlahMesin || 0; // base + pinjam + sewa + trial
 
         let kebutuhanTotal = 0;
         const lineRequirements: Record<string, number> = {};
@@ -117,6 +125,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
           baseCount,
           pinjamCount,
           sewaCount,
+          trialCount,
           totalMesin,
           kebutuhanTotal,
           gap,
@@ -137,6 +146,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
       baseCount: rows.reduce((sum, r) => sum + r.baseCount, 0),
       pinjamCount: rows.reduce((sum, r) => sum + r.pinjamCount, 0),
       sewaCount: rows.reduce((sum, r) => sum + r.sewaCount, 0),
+      trialCount: rows.reduce((sum, r) => sum + r.trialCount, 0),
       totalMesin: rows.reduce((sum, r) => sum + r.totalMesin, 0),
       kebutuhanTotal: rows.reduce((sum, r) => sum + r.kebutuhanTotal, 0),
       gap: rows.reduce((sum, r) => sum + r.gap, 0),
@@ -151,7 +161,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
     });
 
     return { rows, totals };
-  }, [availabilities, requirements, activeLines]);
+  }, [availabilities, requirements, activeLines, selectedDate, rentalTrialRecords]);
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col h-full overflow-hidden transition-colors">
@@ -220,37 +230,43 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                 </th>
                 <th
                   rowSpan={2}
-                  className="sticky left-[200px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-24 min-w-[96px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
+                  className="sticky left-[200px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-28 min-w-[112px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46] whitespace-normal"
                 >
-                  Available
+                  Available Pringapus
                 </th>
                 <th
                   rowSpan={2}
-                  className="sticky left-[296px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-24 min-w-[96px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
-                >
-                  Pringapus
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[392px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
+                  className="sticky left-[312px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
                 >
                   Pinjam
                 </th>
                 <th
                   rowSpan={2}
-                  className="sticky left-[472px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
+                  className="sticky left-[392px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
                 >
                   Sewa
                 </th>
                 <th
                   rowSpan={2}
-                  className="sticky left-[552px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-32 min-w-[128px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
+                  className="sticky left-[472px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
+                >
+                  Trial
+                </th>
+                <th
+                  rowSpan={2}
+                  className="sticky left-[552px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-32 min-w-[128px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46] whitespace-normal"
+                >
+                  Total Available Mesin
+                </th>
+                <th
+                  rowSpan={2}
+                  className="sticky left-[680px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-32 min-w-[128px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46] whitespace-normal"
                 >
                   Total Kebutuhan
                 </th>
                 <th
                   rowSpan={2}
-                  className="sticky left-[680px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-16 min-w-[64px] text-center align-middle shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
+                  className="sticky left-[808px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-16 min-w-[64px] text-center align-middle shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
                 >
                   Gap
                 </th>
@@ -290,23 +306,26 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-4 py-3 border-r border-slate-200 dark:border-slate-700 text-left font-semibold text-slate-700 dark:text-slate-300 shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
                     {row.machine}
                   </td>
-                  <td className="sticky left-[200px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] font-bold text-base">
-                    {row.totalMesin > 0 ? row.totalMesin : "-"}
-                  </td>
-                  <td className="sticky left-[296px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="sticky left-[200px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
                     {row.baseCount > 0 ? row.baseCount : "-"}
                   </td>
-                  <td className="sticky left-[392px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-red-600 dark:text-red-400 font-semibold">
+                  <td className="sticky left-[312px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-red-600 dark:text-red-400 font-semibold">
                     {row.pinjamCount > 0 ? `+${row.pinjamCount}` : "-"}
                   </td>
-                  <td className="sticky left-[472px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-amber-600 dark:text-amber-400 font-semibold">
+                  <td className="sticky left-[392px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-amber-600 dark:text-amber-400 font-semibold">
                     {row.sewaCount > 0 ? `+${row.sewaCount}` : "-"}
                   </td>
-                  <td className="sticky left-[552px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="sticky left-[472px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-indigo-600 dark:text-indigo-400 font-semibold">
+                    {row.trialCount > 0 ? `+${row.trialCount}` : "-"}
+                  </td>
+                  <td className="sticky left-[552px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] font-bold text-base">
+                    {row.totalMesin > 0 ? row.totalMesin : "-"}
+                  </td>
+                  <td className="sticky left-[680px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
                     {row.kebutuhanTotal > 0 ? row.kebutuhanTotal : "-"}
                   </td>
                   <td
-                    className={`sticky left-[680px] z-10 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] ${row.gap < 0 ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-800" : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 text-emerald-600 dark:text-emerald-500"}`}
+                    className={`sticky left-[808px] z-10 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] ${row.gap < 0 ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-800" : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 text-emerald-600 dark:text-emerald-500"}`}
                   >
                     {row.gap !== 0 ? row.gap : "0"}
                   </td>
@@ -333,22 +352,25 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   Total
                 </td>
                 <td className="sticky left-[200px] z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
-                  {tableData.totals.totalMesin}
-                </td>
-                <td className="sticky left-[296px] z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
                   {tableData.totals.baseCount}
                 </td>
-                <td className="sticky left-[392px] z-30 bg-slate-200 dark:bg-slate-700 text-red-700 dark:text-red-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
+                <td className="sticky left-[312px] z-30 bg-slate-200 dark:bg-slate-700 text-red-700 dark:text-red-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
                   {tableData.totals.pinjamCount > 0 ? `+${tableData.totals.pinjamCount}` : "0"}
                 </td>
-                <td className="sticky left-[472px] z-30 bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
+                <td className="sticky left-[392px] z-30 bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
                   {tableData.totals.sewaCount > 0 ? `+${tableData.totals.sewaCount}` : "0"}
                 </td>
+                <td className="sticky left-[472px] z-30 bg-slate-200 dark:bg-slate-700 text-indigo-700 dark:text-indigo-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
+                  {tableData.totals.trialCount > 0 ? `+${tableData.totals.trialCount}` : "0"}
+                </td>
                 <td className="sticky left-[552px] z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
+                  {tableData.totals.totalMesin}
+                </td>
+                <td className="sticky left-[680px] z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
                   {tableData.totals.kebutuhanTotal}
                 </td>
                 <td
-                  className={`sticky left-[680px] z-30 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
+                  className={`sticky left-[808px] z-30 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
                 >
                   {tableData.totals.gap}
                 </td>
