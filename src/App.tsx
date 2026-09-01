@@ -24,13 +24,14 @@ import { OverallRequirementTable } from "./components/dashboard/OverallRequireme
 import { DetailLayout } from "./components/dashboard/DetailLayout";
 import { HistoryLayout } from "./components/dashboard/HistoryLayout";
 import { ChartDashboard } from "./components/dashboard/ChartDashboard";
-import { Sidebar } from "./components/layout/Sidebar";
+import { Sidebar, TabValue } from "./components/layout/Sidebar";
 import { KPICards } from "./components/dashboard/KPICards";
 import { MachineDrillDownModal } from "./components/modals/MachineDrillDownModal";
 import { DataManagerModal } from "./components/modals/DataManagerModal";
 import { PrintableReportModal } from "./components/modals/PrintableReportModal";
 import { IEAssistantModal } from "./components/modals/IEAssistantModal";
 import { RentalAlertsDashboard } from "./components/dashboard/RentalAlertsDashboard";
+import { PreviewDashboard } from "./components/dashboard/PreviewDashboard";
 
 export default function App() {
   // 1. Core Data States
@@ -107,10 +108,8 @@ export default function App() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
 
-  // 4. Tab State
-  const [activeTab, setActiveTab] = useState<
-    "summary" | "detail" | "history" | "chart" | "alerts"
-  >("summary");
+  // 4. Tab State (Default: Preview)
+  const [activeTab, setActiveTab] = useState<TabValue>("preview");
 
   // 5. Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -363,6 +362,19 @@ export default function App() {
               filters={chartFilters}
               onFilterChange={handleChartFilterChange}
               onResetFilters={handleResetChartFilters}
+              lastUpdated={lastUpdated}
+            />
+          )}
+
+          {activeTab === "preview" && (
+            <PreviewDashboard
+              plans={plans}
+              requirements={requirements}
+              availabilities={availabilities}
+              snapshots={snapshots}
+              rentalTrialRecords={rentalTrialRecords}
+              inventoryRecords={inventoryRecords}
+              onNavigateTab={setActiveTab}
               lastUpdated={lastUpdated}
             />
           )}

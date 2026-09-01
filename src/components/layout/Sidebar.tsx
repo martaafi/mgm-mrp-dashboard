@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Layers,
   LayoutDashboard,
   TableProperties,
   Clock,
@@ -7,7 +8,7 @@ import {
   Bell,
 } from "lucide-react";
 
-export type TabValue = "summary" | "detail" | "history" | "chart" | "alerts";
+export type TabValue = "preview" | "summary" | "detail" | "history" | "chart" | "alerts";
 
 interface SidebarProps {
   activeTab: TabValue;
@@ -26,6 +27,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     icon: React.ReactNode;
     badge?: number;
   }[] = [
+    {
+      id: "preview",
+      label: "Preview",
+      icon: <Layers className="w-5 h-5" />,
+    },
     {
       id: "summary",
       label: "Summary",

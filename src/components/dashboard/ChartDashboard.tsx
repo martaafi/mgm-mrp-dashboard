@@ -240,7 +240,7 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 text-center">
             Usia Rata-rata per Jenis Mesin
           </h3>
-          <div className="h-64 w-full overflow-auto">
+          <div className="h-64 w-full overflow-y-auto overflow-x-hidden pr-1">
             <ResponsiveContainer
               width="100%"
               height={Math.max(264, avgAgePerType.length * 28)}
