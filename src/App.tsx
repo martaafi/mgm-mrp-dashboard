@@ -30,6 +30,7 @@ import { MachineDrillDownModal } from "./components/modals/MachineDrillDownModal
 import { DataManagerModal } from "./components/modals/DataManagerModal";
 import { PrintableReportModal } from "./components/modals/PrintableReportModal";
 import { IEAssistantModal } from "./components/modals/IEAssistantModal";
+import { InitialReminderModal } from "./components/modals/InitialReminderModal";
 import { RentalAlertsDashboard } from "./components/dashboard/RentalAlertsDashboard";
 import { PreviewDashboard } from "./components/dashboard/PreviewDashboard";
 
@@ -107,6 +108,12 @@ export default function App() {
   const [isDataManagerOpen, setIsDataManagerOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
+  const [isInitialReminderOpen, setIsInitialReminderOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("mrp_suppress_initial_refresh_modal") !== "true";
+    }
+    return true;
+  });
 
   // 4. Tab State (Default: Preview)
   const [activeTab, setActiveTab] = useState<TabValue>("preview");
@@ -492,6 +499,14 @@ export default function App() {
         onClose={() => setIsAIAssistantOpen(false)}
         summaryData={summaryData}
         lineMatrix={lineMatrix}
+      />
+
+      {/* 5. Initial Data Refresh Reminder Pop-Up */}
+      <InitialReminderModal
+        isOpen={isInitialReminderOpen}
+        onClose={() => setIsInitialReminderOpen(false)}
+        onRefreshData={handleRefreshData}
+        isRefreshing={isRefreshing}
       />
     </div>
   );

@@ -1459,7 +1459,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           <Line
                             type="monotone"
                             dataKey="available"
-                            stroke="#ef4444"
+                            stroke="#10b981"
                             strokeWidth={2}
                             strokeDasharray="4 4"
                             dot={false}
@@ -1480,7 +1480,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                         <span className="flex items-center gap-1">
                           <span
                             className="w-4 h-0.5 inline-block"
-                            style={{ borderTop: "2px dashed #ef4444" }}
+                            style={{ borderTop: "2px dashed #10b981" }}
                           />
                           Ketersediaan Mesin
                         </span>
@@ -1532,7 +1532,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[160px]">
                             Jenis Mesin
                           </th>
-                          <th className="px-4 py-3 font-semibold text-center text-red-600 dark:text-red-400 whitespace-nowrap min-w-[80px]">
+                          <th className="px-4 py-3 font-semibold text-center text-emerald-600 dark:text-emerald-400 whitespace-nowrap min-w-[80px]">
                             Tersedia
                           </th>
                           <th className="px-4 py-3 font-semibold text-center text-pink-600 dark:text-pink-400 min-w-[150px]">

@@ -456,7 +456,6 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
       .slice(0, 5);
   }, [machineRequirements]);
 
-
   const formattedTrendData = useMemo(() => {
     return trendData.map((d) => {
       const point: any = { date: d.date };
@@ -533,7 +532,10 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
             </h2>
             {filters && (filters.startDate || filters.endDate) ? (
               <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 w-fit">
-                Periode: {filters.startDate === filters.endDate ? filters.startDate : `${filters.startDate} s/d ${filters.endDate}`}
+                Periode:{" "}
+                {filters.startDate === filters.endDate
+                  ? filters.startDate
+                  : `${filters.startDate} s/d ${filters.endDate}`}
               </span>
             ) : (
               <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 w-fit">
