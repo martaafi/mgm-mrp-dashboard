@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { Calendar, AlertCircle } from "lucide-react";
+import React, { useState, useMemo, useRef } from "react";
+import { Calendar, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import {
   ProductionPlan,
@@ -27,6 +27,20 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
   // Use initialDate if provided, otherwise default to today's date in YYYY-MM-DD
   const defaultDate = initialDate || new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState<string>(defaultDate);
+
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  const handleScrollLeft = () => {
+    if (tableRef.current) {
+      tableRef.current.scrollBy({ left: -600, behavior: "smooth" });
+    }
+  };
+
+  const handleScrollRight = () => {
+    if (tableRef.current) {
+      tableRef.current.scrollBy({ left: 600, behavior: "smooth" });
+    }
+  };
 
   // 1. Get active lines and their styles for the selected date
   const activeLines = useMemo(() => {
@@ -177,6 +191,33 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
+          {/* Quick scroll controls */}
+          {activeLines.length > 0 && (
+            <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 shadow-sm">
+              <button
+                type="button"
+                onClick={handleScrollLeft}
+                title="Geser ke Kiri (Ringkasan / Line sebelumnya)"
+                aria-label="Geser ke Kiri"
+                className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 active:bg-slate-200 dark:active:bg-slate-600 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-slate-300 px-2 select-none whitespace-nowrap">
+                Line Style
+              </span>
+              <button
+                type="button"
+                onClick={handleScrollRight}
+                title="Geser ke Kanan (Line berikutnya)"
+                aria-label="Geser ke Kanan"
+                className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 active:bg-slate-200 dark:active:bg-slate-600 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
             <span className="text-[10px] font-semibold uppercase tracking-wider">
               Tanggal:
@@ -205,71 +246,71 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
       </div>
 
       {/* Matrix Table */}
-      <div className="flex-1 overflow-auto relative">
-        {activeLines.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400">
-            <AlertCircle className="w-8 h-8 mb-2 text-slate-400 dark:text-slate-500" />
-            <p>
-              Tidak ada data Production Plan untuk tanggal{" "}
-              {format(new Date(selectedDate), "dd MMM yyyy")}.
-            </p>
-            <p className="text-xs mt-1">
-              Silakan pilih tanggal lain yang memiliki rencana produksi.
-            </p>
-          </div>
-        ) : (
-          <table className="w-full text-[11px] sm:text-xs text-right border-separate border-spacing-0 whitespace-nowrap">
-            <thead className="sticky top-0 z-20 shadow-sm text-slate-700 dark:text-slate-300">
-              {/* Header Row 1: Styles */}
-              <tr className="bg-emerald-600 dark:bg-emerald-800 text-[10px] uppercase font-bold tracking-widest text-emerald-50 dark:text-emerald-100">
-                <th
-                  rowSpan={2}
-                  className="sticky left-0 z-30 bg-emerald-700 dark:bg-emerald-900 px-4 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 text-left align-middle min-w-[200px] shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
-                >
-                  JENIS MESIN
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[200px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-28 min-w-[112px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46] whitespace-normal"
-                >
-                  Available Pringapus
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[312px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
-                >
-                  Pinjam
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[392px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
-                >
-                  Sewa
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[472px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
-                >
-                  Trial
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[552px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-32 min-w-[128px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46] whitespace-normal"
-                >
-                  Total Available Mesin
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[680px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-32 min-w-[128px] text-center align-middle leading-tight shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46] whitespace-normal"
-                >
-                  Total Kebutuhan
-                </th>
-                <th
-                  rowSpan={2}
-                  className="sticky left-[808px] z-30 bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-16 min-w-[64px] text-center align-middle shadow-[1px_0_0_0_#10b981] dark:shadow-[1px_0_0_0_#065f46]"
-                >
-                  Gap
-                </th>
+      <div ref={tableRef} className="flex-1 overflow-auto relative scroll-smooth">
+          {activeLines.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400">
+              <AlertCircle className="w-8 h-8 mb-2 text-slate-400 dark:text-slate-500" />
+              <p>
+                Tidak ada data Production Plan untuk tanggal{" "}
+                {format(new Date(selectedDate), "dd MMM yyyy")}.
+              </p>
+              <p className="text-xs mt-1">
+                Silakan pilih tanggal lain yang memiliki rencana produksi.
+              </p>
+            </div>
+          ) : (
+            <table className="w-full text-[11px] sm:text-xs text-right border-separate border-spacing-0 whitespace-nowrap">
+              <thead className="sticky top-0 z-20 shadow-sm text-slate-700 dark:text-slate-300">
+                {/* Header Row 1: Styles */}
+                <tr className="bg-emerald-600 dark:bg-emerald-800 text-[10px] uppercase font-bold tracking-widest text-emerald-50 dark:text-emerald-100">
+                  <th
+                    rowSpan={2}
+                    className="sticky left-0 z-30 bg-emerald-700 dark:bg-emerald-900 px-4 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 text-left align-middle min-w-[200px] shadow-[2px_0_5px_rgba(0,0,0,0.15)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.35)]"
+                  >
+                    JENIS MESIN
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-28 min-w-[112px] text-center align-middle leading-tight whitespace-normal"
+                  >
+                    Available Pringapus
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight"
+                  >
+                    Pinjam
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight"
+                  >
+                    Sewa
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight"
+                  >
+                    Trial
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-32 min-w-[128px] text-center align-middle leading-tight whitespace-normal"
+                  >
+                    Total Available Mesin
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-32 min-w-[128px] text-center align-middle leading-tight whitespace-normal"
+                  >
+                    Total Kebutuhan
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-16 min-w-[64px] text-center align-middle"
+                  >
+                    Gap
+                  </th>
                 <th className="px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 bg-emerald-700 dark:bg-emerald-900 w-16 text-center align-middle">
                   Style
                 </th>
@@ -303,29 +344,29 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   key={row.machine}
                   className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"
                 >
-                  <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-4 py-3 border-r border-slate-200 dark:border-slate-700 text-left font-semibold text-slate-700 dark:text-slate-300 shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-4 py-3 border-r border-slate-200 dark:border-slate-700 text-left font-semibold text-slate-700 dark:text-slate-300 shadow-[2px_0_5px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.25)]">
                     {row.machine}
                   </td>
-                  <td className="sticky left-[200px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center">
                     {row.baseCount > 0 ? row.baseCount : "-"}
                   </td>
-                  <td className="sticky left-[312px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-red-600 dark:text-red-400 font-semibold">
+                  <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center text-red-600 dark:text-red-400 font-semibold">
                     {row.pinjamCount > 0 ? `+${row.pinjamCount}` : "-"}
                   </td>
-                  <td className="sticky left-[392px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-amber-600 dark:text-amber-400 font-semibold">
+                  <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center text-amber-600 dark:text-amber-400 font-semibold">
                     {row.sewaCount > 0 ? `+${row.sewaCount}` : "-"}
                   </td>
-                  <td className="sticky left-[472px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] text-indigo-600 dark:text-indigo-400 font-semibold">
+                  <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center text-indigo-600 dark:text-indigo-400 font-semibold">
                     {row.trialCount > 0 ? `+${row.trialCount}` : "-"}
                   </td>
-                  <td className="sticky left-[552px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] font-bold text-base">
+                  <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold text-base">
                     {row.totalMesin > 0 ? row.totalMesin : "-"}
                   </td>
-                  <td className="sticky left-[680px] z-10 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155]">
+                  <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center">
                     {row.kebutuhanTotal > 0 ? row.kebutuhanTotal : "-"}
                   </td>
                   <td
-                    className={`sticky left-[808px] z-10 px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold shadow-[1px_0_0_0_#e2e8f0] dark:shadow-[1px_0_0_0_#334155] ${row.gap < 0 ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-800" : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 text-emerald-600 dark:text-emerald-500"}`}
+                    className={`px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold ${row.gap < 0 ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-800" : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 text-emerald-600 dark:text-emerald-500"}`}
                   >
                     {row.gap !== 0 ? row.gap : "0"}
                   </td>
@@ -348,29 +389,29 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
             {/* Footer Row (Totals) */}
             <tfoot className="sticky bottom-0 z-20 bg-slate-100 dark:bg-slate-800 shadow-[0_-1px_0_0_#cbd5e1] dark:shadow-[0_-1px_0_0_#475569]">
               <tr className="font-bold text-slate-800 dark:text-slate-200">
-                <td className="sticky left-0 z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-4 py-3 border-r border-slate-300 dark:border-slate-600 text-left shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
+                <td className="sticky left-0 z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-4 py-3 border-r border-slate-300 dark:border-slate-600 text-left shadow-[2px_0_5px_rgba(0,0,0,0.15)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.35)]">
                   Total
                 </td>
-                <td className="sticky left-[200px] z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
+                <td className="px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center">
                   {tableData.totals.baseCount}
                 </td>
-                <td className="sticky left-[312px] z-30 bg-slate-200 dark:bg-slate-700 text-red-700 dark:text-red-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
+                <td className="text-red-700 dark:text-red-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center font-bold">
                   {tableData.totals.pinjamCount > 0 ? `+${tableData.totals.pinjamCount}` : "0"}
                 </td>
-                <td className="sticky left-[392px] z-30 bg-slate-200 dark:bg-slate-700 text-amber-700 dark:text-amber-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
+                <td className="text-amber-700 dark:text-amber-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center font-bold">
                   {tableData.totals.sewaCount > 0 ? `+${tableData.totals.sewaCount}` : "0"}
                 </td>
-                <td className="sticky left-[472px] z-30 bg-slate-200 dark:bg-slate-700 text-indigo-700 dark:text-indigo-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] font-bold">
+                <td className="text-indigo-700 dark:text-indigo-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center font-bold">
                   {tableData.totals.trialCount > 0 ? `+${tableData.totals.trialCount}` : "0"}
                 </td>
-                <td className="sticky left-[552px] z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
+                <td className="text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center">
                   {tableData.totals.totalMesin}
                 </td>
-                <td className="sticky left-[680px] z-30 bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569]">
+                <td className="text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center">
                   {tableData.totals.kebutuhanTotal}
                 </td>
                 <td
-                  className={`sticky left-[808px] z-30 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center shadow-[1px_0_0_0_#cbd5e1] dark:shadow-[1px_0_0_0_#475569] ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
+                  className={`px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
                 >
                   {tableData.totals.gap}
                 </td>

@@ -84,7 +84,9 @@ User Question: "${textToSend}"
 
 Please provide a clear, structured, actionable Industrial Engineering recommendation formatted in markdown with bullet points. Focus on real garment manufacturing techniques (buffer inventory borrowing, operator multi-skilling, workstation layout changes, or preventative maintenance timing).`;
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey =
+        import.meta.env.VITE_GEMINI_API_KEY ||
+        (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined);
       if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
         // Intelligent fallback IE response if key is missing
         await new Promise((resolve) => setTimeout(resolve, 800));
