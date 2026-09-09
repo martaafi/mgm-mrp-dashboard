@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef } from "react";
-import { Calendar, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import {
   ProductionPlan,
@@ -7,7 +7,8 @@ import {
   MachineAvailability,
   RentalTrialRecord,
 } from "../../types/mrp";
-import { getAdjustedAvailabilityForDate } from "../../utils/mrpCalculations";
+import { getAdjustedAvailabilityForDateRange, isSunday } from "../../utils/mrpCalculations";
+import { DateRangePicker } from "../filters/DateRangePicker";
 
 interface DetailLayoutProps {
   plans: ProductionPlan[];
@@ -15,6 +16,7 @@ interface DetailLayoutProps {
   availabilities: MachineAvailability[];
   rentalTrialRecords?: RentalTrialRecord[];
   initialDate?: string;
+  initialEndDate?: string;
 }
 
 export const DetailLayout: React.FC<DetailLayoutProps> = ({
@@ -23,10 +25,51 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
   availabilities,
   rentalTrialRecords = [],
   initialDate,
+  initialEndDate,
 }) => {
-  // Use initialDate if provided, otherwise default to today's date in YYYY-MM-DD
-  const defaultDate = initialDate || new Date().toISOString().split("T")[0];
-  const [selectedDate, setSelectedDate] = useState<string>(defaultDate);
+  // Compute initial date range, ensuring we never default to a Sunday
+  const defaultRange = useMemo(() => {
+    let start = initialDate || "";
+    let end = initialEndDate || initialDate || "";
+
+    if (start && isSunday(start)) {
+      const d = new Date(start + "T00:00:00");
+      d.setDate(d.getDate() + 1);
+      start = format(d, "yyyy-MM-dd");
+    }
+
+    if (!start) {
+      const today = new Date();
+      if (today.getDay() === 0) {
+        today.setDate(today.getDate() + 1);
+      }
+      start = format(today, "yyyy-MM-dd");
+    }
+
+    if (!end || end < start) {
+      end = start;
+    }
+
+    return { startDate: start, endDate: end };
+  }, [initialDate, initialEndDate]);
+
+  const [dateRange, setDateRange] = useState<{ startDate: string; endDate: string }>(defaultRange);
+
+  useEffect(() => {
+    if (initialDate) {
+      let start = initialDate;
+      let end = initialEndDate || initialDate;
+      if (isSunday(start)) {
+        const d = new Date(start + "T00:00:00");
+        d.setDate(d.getDate() + 1);
+        start = format(d, "yyyy-MM-dd");
+      }
+      if (end < start) end = start;
+      setDateRange({ startDate: start, endDate: end });
+    }
+  }, [initialDate, initialEndDate]);
+
+  const { startDate, endDate } = dateRange;
 
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -42,23 +85,72 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
     }
   };
 
-  // 1. Get active lines and their styles for the selected date
+  // 1. Get active lines and their styles for the selected date range.
+  // If a line runs more than 1 style in the selected range, use the LATEST style for that line!
   const activeLines = useMemo(() => {
-    const linesMap: Record<string, { style: string; displayStyle: string }> =
-      {};
+    const linePlansMap: Record<string, ProductionPlan[]> = {};
 
-    // Filter plans by date and keep the latest entry for each line, ignore 'no plan'
     plans.forEach((p) => {
-      if (
-        p.date === selectedDate &&
-        p.style &&
-        !p.style.toLowerCase().includes("no plan")
-      ) {
-        linesMap[p.line] = {
-          style: p.style,
-          displayStyle: p.displayStyle || p.style,
-        };
+      if (!p.date || !p.line) return;
+      if (isSunday(p.date)) return;
+      if (!p.style || p.style.toLowerCase().includes("no plan")) return;
+
+      const inRange =
+        (!startDate || p.date >= startDate) &&
+        (!endDate || p.date <= endDate);
+
+      if (inRange) {
+        if (!linePlansMap[p.line]) {
+          linePlansMap[p.line] = [];
+        }
+        linePlansMap[p.line].push(p);
       }
+    });
+
+    // For each line, sort plans chronologically by date and pick the LATEST plan for machine calculation,
+    // while collecting all unique styles for display
+    const linesMap: Record<
+      string,
+      {
+        style: string;
+        displayStyles: string[];
+        latestDate: string;
+      }
+    > = {};
+
+    Object.entries(linePlansMap).forEach(([line, linePlans]) => {
+      // Sort chronologically ascending
+      linePlans.sort((a, b) => a.date.localeCompare(b.date));
+      const latestPlan = linePlans[linePlans.length - 1];
+
+      // Collect all unique styles from all plans in this range for display
+      // Parse from Planning Style PPIC (Col C) and deduplicate
+      const displayStyles: string[] = [];
+      const seen = new Set<string>();
+
+      linePlans.forEach((p) => {
+        const raw = (p.displayStyle || p.style || "").trim();
+        // Split by comma or newline so individual styles inside combined cells are cleanly separated
+        const parts = raw.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+        parts.forEach((part) => {
+          const key = part.toUpperCase();
+          if (key === "NO PLANNING" || key.includes("NO PLAN")) return;
+          if (!seen.has(key)) {
+            seen.add(key);
+            displayStyles.push(part);
+          }
+        });
+      });
+
+      if (displayStyles.length === 0 && latestPlan.style) {
+        displayStyles.push(latestPlan.style);
+      }
+
+      linesMap[line] = {
+        style: latestPlan.style, // used for machine requirement calculation (STYLE TERAKHIR)
+        displayStyles,
+        latestDate: latestPlan.date,
+      };
     });
 
     // Convert to sorted array
@@ -70,12 +162,17 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
         line,
         ...linesMap[line],
       }));
-  }, [plans, selectedDate]);
+  }, [plans, startDate, endDate]);
 
   // 2. Prepare machine rows
   const tableData = useMemo(() => {
-    // Adjust availability for the selected date (subtract expired rental/trial machines)
-    const adjustedAvail = getAdjustedAvailabilityForDate(selectedDate, availabilities, rentalTrialRecords);
+    // Adjust availability for the selected date range
+    const adjustedAvail = getAdjustedAvailabilityForDateRange(
+      startDate,
+      endDate,
+      availabilities,
+      rentalTrialRecords,
+    );
 
     // Collect all machine types
     const machineTypes = new Set(adjustedAvail.map((a) => a.jenisMesin));
@@ -175,22 +272,22 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
     });
 
     return { rows, totals };
-  }, [availabilities, requirements, activeLines, selectedDate, rentalTrialRecords]);
+  }, [availabilities, requirements, activeLines, startDate, endDate, rentalTrialRecords]);
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col h-full overflow-hidden transition-colors">
       {/* Header & Filter */}
-      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/50 transition-colors">
+      <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/50 transition-colors">
         <div>
           <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 leading-tight">
             Detail Layout Matrix
           </h2>
           <p className="text-[10px] text-slate-500 dark:text-slate-400">
-            Rincian kebutuhan per mesin dan per line untuk satu hari spesifik.
+            Rincian kebutuhan per mesin dan per line berdasarkan style terakhir pada tanggal/week terpilih.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 flex-wrap gap-y-2">
           {/* Quick scroll controls */}
           {activeLines.length > 0 && (
             <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 shadow-sm">
@@ -220,28 +317,21 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
 
           <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
             <span className="text-[10px] font-semibold uppercase tracking-wider">
-              Tanggal:
+              Tanggal / Week:
             </span>
           </div>
-          <div className="relative flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 rounded-lg px-2.5 py-1.5 focus-within:border-indigo-500 dark:focus-within:border-indigo-400 shadow-sm transition-colors">
-            <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 mr-1.5 shrink-0" />
-            <span className="text-xs font-medium text-slate-800 dark:text-slate-200 cursor-pointer pointer-events-none">
-              {format(new Date(selectedDate), "dd MMM yyyy")}
-            </span>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              onClick={(e) => {
-                try {
-                  (e.target as HTMLInputElement).showPicker();
-                } catch (err) {
-                  // Fallback for older browsers
-                }
-              }}
-            />
-          </div>
+
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={(date) =>
+              setDateRange((prev) => ({ ...prev, startDate: date }))
+            }
+            onEndDateChange={(date) =>
+              setDateRange((prev) => ({ ...prev, endDate: date }))
+            }
+            align="right"
+          />
         </div>
       </div>
 
@@ -250,11 +340,10 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
           {activeLines.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400">
               <AlertCircle className="w-8 h-8 mb-2 text-slate-400 dark:text-slate-500" />
-              <p>
-                Tidak ada data Production Plan untuk tanggal{" "}
-                {format(new Date(selectedDate), "dd MMM yyyy")}.
+              <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm">
+                Tidak ada Plan Produksi  untuk tanggal terpilih
               </p>
-              <p className="text-xs mt-1">
+              <p className="text-xs mt-1 text-slate-400 dark:text-slate-500">
                 Silakan pilih tanggal lain yang memiliki rencana produksi.
               </p>
             </div>
@@ -317,9 +406,27 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                 {activeLines.map((al) => (
                   <th
                     key={`style-${al.line}`}
-                    className="px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 bg-emerald-600 dark:bg-emerald-800 text-center whitespace-normal min-w-[100px] align-middle text-emerald-50 dark:text-emerald-100 text-[10px] leading-tight normal-case font-semibold tracking-normal"
+                    className="px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 bg-emerald-600 dark:bg-emerald-800 text-center whitespace-normal min-w-[110px] align-middle text-emerald-50 dark:text-emerald-100 text-[10px] leading-tight normal-case font-semibold tracking-normal"
+                    title={
+                      al.displayStyles.length > 1
+                        ? `Menampilkan ${al.displayStyles.length} style pada rentang ini: ${al.displayStyles.join(", ")}. Perhitungan mesin menggunakan style terakhir (${al.style}).`
+                        : al.style
+                    }
                   >
-                    {al.displayStyle}
+                    <div className="flex flex-col items-center justify-center gap-1 py-0.5">
+                      {al.displayStyles.map((s, idx) => (
+                        <span
+                          key={idx}
+                          className={`block leading-tight text-center ${
+                            al.displayStyles.length > 1
+                              ? "bg-emerald-700/60 dark:bg-emerald-950/60 px-1.5 py-1 rounded border border-emerald-400/20 w-full"
+                              : ""
+                          }`}
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
                   </th>
                 ))}
               </tr>

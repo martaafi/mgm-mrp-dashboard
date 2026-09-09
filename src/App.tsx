@@ -11,6 +11,9 @@ import {
 } from "./types/mrp";
 import {
   filterProductionPlans,
+  excludeNoPlanningOnlyLines,
+  isSunday,
+  excludeSundays,
   calculateMachineRequirements,
   buildLineMachineMatrix,
   getMachineDrillDown,
@@ -85,6 +88,9 @@ export default function App() {
 
   const getTodayStr = () => {
     const today = new Date();
+    if (today.getDay() === 0) {
+      today.setDate(today.getDate() + 1); // Default to Monday if today is Sunday
+    }
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, "0");
     const day = String(today.getDate()).padStart(2, "0");
@@ -167,10 +173,46 @@ export default function App() {
     });
   };
 
-  // 4. Derived Calculations for Summary Tab
+  // 4. Filter out Sundays and lines that only have "NO PLANNING" globally
+  const cleanedPlans = useMemo(
+    () => excludeNoPlanningOnlyLines(excludeSundays(plans)),
+    [plans],
+  );
+
+  // Identify lines that only have "NO PLANNING" (for filtering snapshots etc.)
+  const noPlanningLines = useMemo(() => {
+    const nonSundayPlans = excludeSundays(plans);
+    const plansByLine: Record<string, ProductionPlan[]> = {};
+    nonSundayPlans.forEach(plan => {
+      if (!plansByLine[plan.line]) plansByLine[plan.line] = [];
+      plansByLine[plan.line].push(plan);
+    });
+    const excluded = new Set<string>();
+    Object.entries(plansByLine).forEach(([line, linePlans]) => {
+      const allNoPlanning = linePlans.every(p => {
+        const style = (p.style || "").trim().toUpperCase();
+        const displayStyle = (p.displayStyle || "").trim().toUpperCase();
+        return style === "NO PLANNING" || displayStyle === "NO PLANNING";
+      });
+      if (allNoPlanning) excluded.add(line);
+    });
+    return excluded;
+  }, [plans]);
+
+  // Filter snapshots to exclude NO PLANNING-only lines and Sundays
+  const cleanedSnapshots = useMemo(
+    () => snapshots.filter(s => {
+      if (noPlanningLines.has(s.line)) return false;
+      if (isSunday(s.planningDate)) return false;
+      return true;
+    }),
+    [snapshots, noPlanningLines],
+  );
+
+  // Derived Calculations for Summary Tab
   const filteredPlans = useMemo(
-    () => filterProductionPlans(plans, filters),
-    [plans, filters],
+    () => filterProductionPlans(cleanedPlans, filters),
+    [cleanedPlans, filters],
   );
 
   const adjustedAvailabilities = useMemo(() => {
@@ -179,8 +221,8 @@ export default function App() {
 
   // Derived Calculations for Chart/Analytics Tab (Unfiltered by default)
   const chartFilteredPlans = useMemo(
-    () => filterProductionPlans(plans, chartFilters),
-    [plans, chartFilters],
+    () => filterProductionPlans(cleanedPlans, chartFilters),
+    [cleanedPlans, chartFilters],
   );
 
   const chartAdjustedAvailabilities = useMemo(() => {
@@ -375,10 +417,10 @@ export default function App() {
 
           {activeTab === "preview" && (
             <PreviewDashboard
-              plans={plans}
+              plans={cleanedPlans}
               requirements={requirements}
               availabilities={availabilities}
-              snapshots={snapshots}
+              snapshots={cleanedSnapshots}
               rentalTrialRecords={rentalTrialRecords}
               inventoryRecords={inventoryRecords}
               onNavigateTab={setActiveTab}
@@ -399,6 +441,7 @@ export default function App() {
               {/* Overall Machine Requirement Table */}
               <OverallRequirementTable
                 data={summaryData}
+                lineMatrix={lineMatrix}
                 onSelectMachine={(machine) => setSelectedMachine(machine)}
               />
             </>
@@ -406,18 +449,19 @@ export default function App() {
 
           {activeTab === "detail" && (
             <DetailLayout
-              plans={plans}
+              plans={cleanedPlans}
               requirements={requirements}
               availabilities={availabilities}
               rentalTrialRecords={rentalTrialRecords}
               initialDate={filters.startDate}
+              initialEndDate={filters.endDate}
             />
           )}
 
           {activeTab === "history" && (
             <HistoryLayout
-              snapshots={snapshots}
-              plans={plans}
+              snapshots={cleanedSnapshots}
+              plans={cleanedPlans}
               requirements={requirements}
               availabilities={availabilities}
               rentalTrialRecords={rentalTrialRecords}
@@ -474,7 +518,7 @@ export default function App() {
       <DataManagerModal
         isOpen={isDataManagerOpen}
         onClose={() => setIsDataManagerOpen(false)}
-        plans={plans}
+        plans={cleanedPlans}
         requirements={requirements}
         availabilities={availabilities}
         onUpdatePlans={setPlans}

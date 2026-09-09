@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { format, getISOWeek, getYear } from "date-fns";
+import { format, getISOWeek, getYear, startOfISOWeek, subWeeks } from "date-fns";
 import {
   AlertTriangle,
   Clock,
@@ -9,6 +9,7 @@ import {
   Info,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Activity,
   BarChart2,
   Filter,
@@ -34,6 +35,7 @@ import {
 import {
   calculateMachineRequirements,
   getAdjustedAvailabilityForDateRange,
+  isSunday,
 } from "../../utils/mrpCalculations";
 
 interface HistoryLayoutProps {
@@ -71,17 +73,25 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     return `${year}-${month}-${day}`;
   };
 
-  // Filter snapshots: only those with changes, and planningDate >= today
-  const rawChangedSnapshots = useMemo(() => {
+  // Helper: get the start date (Monday) of 4 weeks prior to the current week
+  const getHistoryStartStr = () => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const startOfCurrentWeek = startOfISOWeek(today);
+    const fourWeeksAgo = subWeeks(startOfCurrentWeek, 4);
+    const year = fourWeeksAgo.getFullYear();
+    const month = String(fourWeeksAgo.getMonth() + 1).padStart(2, "0");
+    const day = String(fourWeeksAgo.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // Filter snapshots: only those with changes, and planningDate >= 4 weeks prior to current week
+  const rawChangedSnapshots = useMemo(() => {
+    const historyStartStr = getHistoryStartStr();
 
     return snapshots.filter((s) => {
+      if (isSunday(s.planningDate)) return false;
       if (!s.isMachineStyleChanged && !s.isPlanningStyleChanged) return false;
-
-      const planDate = new Date(s.planningDate);
-      planDate.setHours(0, 0, 0, 0);
-      return planDate >= today;
+      return s.planningDate >= historyStartStr;
     });
   }, [snapshots]);
 
@@ -184,14 +194,21 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
   // Calculate Macro (Factory-wide) Impact
   const factoryImpact = useMemo(() => {
-    if (!plans || plans.length === 0 || !selectedSnapshot) return null;
+    if (!plans || plans.length === 0) return null;
 
-    const todayStr = getTodayStr();
+    const historyStartStr = getHistoryStartStr();
+    const targetDate =
+      selectedSnapshot?.planningDate ||
+      plans[plans.length - 1]?.date ||
+      historyStartStr;
+    const minDate =
+      historyStartStr < targetDate ? historyStartStr : targetDate;
+    const maxDate =
+      historyStartStr > targetDate ? historyStartStr : targetDate;
 
-    // Filter plans from today to the selected snapshot's planning date
+    // Filter plans from minDate to maxDate
     const impactPlans = plans.filter(
-      (plan) =>
-        plan.date >= todayStr && plan.date <= selectedSnapshot.planningDate,
+      (plan) => plan.date >= minDate && plan.date <= maxDate,
     );
 
     if (impactPlans.length === 0) return null;
@@ -207,8 +224,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     let totalStyleChanges = 0;
     const changedSnapshotsInRange = rawChangedSnapshots.filter(
       (s) =>
-        s.planningDate >= todayStr &&
-        s.planningDate <= selectedSnapshot.planningDate,
+        s.planningDate >= minDate &&
+        s.planningDate <= maxDate,
     );
 
     const hypotheticalPlans = impactPlans.map((p) => {
@@ -310,8 +327,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       }),
       hasNewShortage,
       totalStyleChanges,
-      startDate: todayStr,
-      endDate: selectedSnapshot.planningDate,
+      startDate: minDate,
+      endDate: maxDate,
     };
   }, [
     plans,
@@ -361,13 +378,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   // Logic: For each day, SUM machine requirements across all lines (simultaneous).
   //        For each week, take the MAX daily total (peak demand).
   const weeklyComparisonData = useMemo(() => {
-    const todayStr = getTodayStr();
+    const historyStartStr = getHistoryStartStr();
 
-    // Only use snapshots from today onwards (exclude Sundays)
+    // Use snapshots from 4 weeks prior to current week onwards (exclude Sundays)
     const futureSnapshots = snapshots.filter(
       (s) =>
-        s.planningDate >= todayStr &&
-        new Date(s.planningDate + "T00:00:00").getDay() !== 0,
+        s.planningDate >= historyStartStr &&
+        !isSunday(s.planningDate),
     );
     if (futureSnapshots.length === 0) {
       return {
@@ -724,10 +741,18 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     rentalTrialRecords,
   ]);
 
-  // Auto-select first week when chart data is available
+  // Auto-select current week (week berjalan) or first available week when chart data is available
   React.useEffect(() => {
     if (weeklyComparisonData.chartData.length > 0 && !selectedChartWeek) {
-      setSelectedChartWeek(weeklyComparisonData.chartData[0].week);
+      const currentWeekLabel = getWeekLabel(getTodayStr());
+      const hasCurrentWeek = weeklyComparisonData.chartData.some(
+        (d) => d.week === currentWeekLabel,
+      );
+      if (hasCurrentWeek) {
+        setSelectedChartWeek(currentWeekLabel);
+      } else {
+        setSelectedChartWeek(weeklyComparisonData.chartData[0].week);
+      }
     }
   }, [weeklyComparisonData.chartData, selectedChartWeek]);
 
@@ -735,21 +760,17 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   const selectedWeekMachineData = useMemo(() => {
     if (!selectedChartWeek) return [];
 
-    const todayStr = getTodayStr();
-    const futureSnapshots = snapshots.filter((s) => s.planningDate >= todayStr);
+    // Get snapshots for the selected week (exclude Sundays)
+    const weekSnapshots = snapshots.filter(
+      (s) =>
+        getWeekLabel(s.planningDate) === selectedChartWeek &&
+        !isSunday(s.planningDate),
+    );
 
     // Get unique dates in the selected week (exclude Sundays)
     const weekDates = [
-      ...new Set(
-        futureSnapshots
-          .map((s) => s.planningDate)
-          .filter((date) => {
-            if (getWeekLabel(date) !== selectedChartWeek) return false;
-            const d = new Date(date);
-            return d.getDay() !== 0; // Exclude Sunday
-          }),
-      ),
-    ];
+      ...new Set(weekSnapshots.map((s) => s.planningDate)),
+    ].sort();
 
     if (weekDates.length === 0) return [];
 
@@ -759,7 +780,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     const machineMaxUpdate: Record<string, number> = {};
 
     weekDates.forEach((date) => {
-      const daySnapshots = futureSnapshots.filter(
+      const daySnapshots = weekSnapshots.filter(
         (s) => s.planningDate === date,
       );
       const machineDayLast: Record<string, number> = {};
@@ -864,73 +885,29 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   const selectedWeekLineData = useMemo(() => {
     if (!selectedChartWeek) return [];
 
-    const todayStr = getTodayStr();
-    const futureSnapshots = snapshots.filter((s) => s.planningDate >= todayStr);
+    // Get snapshots for the selected week (exclude Sundays)
+    const weekSnapshots = snapshots.filter(
+      (s) =>
+        getWeekLabel(s.planningDate) === selectedChartWeek &&
+        !isSunday(s.planningDate),
+    );
 
     // Get unique dates in the selected week (exclude Sundays)
     const weekDates = [
-      ...new Set(
-        futureSnapshots
-          .map((s) => s.planningDate)
-          .filter((date) => {
-            if (getWeekLabel(date) !== selectedChartWeek) return false;
-            const d = new Date(date);
-            return d.getDay() !== 0; // Exclude Sunday
-          }),
-      ),
+      ...new Set(weekSnapshots.map((s) => s.planningDate)),
     ].sort();
 
     if (weekDates.length === 0) return [];
 
-    // Get snapshots in this week
-    const weekSnapshots = futureSnapshots.filter((s) =>
-      weekDates.includes(s.planningDate),
-    );
-
-    // Group by line, collecting per-day style snapshots
-    const lineMap: Record<
-      string,
-      {
-        lastStyles: string[];
-        updateStyles: string[];
-        // per-day snapshots for this line: { date -> { lastMachineStyle, updateMachineStyle } }
-        daySnapshots: { date: string; lastMachineStyle: string; updateMachineStyle: string }[];
-      }
-    > = {};
-
-    // Sort by date to ensure correct ordering
     const sortedWeekSnapshots = [...weekSnapshots].sort((a, b) =>
       a.planningDate.localeCompare(b.planningDate),
     );
 
+    // Group by line, collecting per-day style snapshots
+    const lineSnapsMap: Record<string, typeof sortedWeekSnapshots> = {};
     sortedWeekSnapshots.forEach((s) => {
-      if (!lineMap[s.line]) {
-        lineMap[s.line] = {
-          lastStyles: [],
-          updateStyles: [],
-          daySnapshots: [],
-        };
-      }
-      const entry = lineMap[s.line];
-
-      if (
-        s.lastMachineStyle &&
-        !entry.lastStyles.includes(s.lastMachineStyle)
-      ) {
-        entry.lastStyles.push(s.lastMachineStyle);
-      }
-      if (
-        s.updateMachineStyle &&
-        !entry.updateStyles.includes(s.updateMachineStyle)
-      ) {
-        entry.updateStyles.push(s.updateMachineStyle);
-      }
-
-      entry.daySnapshots.push({
-        date: s.planningDate,
-        lastMachineStyle: s.lastMachineStyle,
-        updateMachineStyle: s.updateMachineStyle,
-      });
+      if (!lineSnapsMap[s.line]) lineSnapsMap[s.line] = [];
+      lineSnapsMap[s.line].push(s);
     });
 
     // Calculate availability for the week
@@ -949,63 +926,151 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
           )
         : availabilities;
 
-    return Object.entries(lineMap)
-      .map(([line, data]) => {
-        const lastStyleLabel = data.lastStyles.join(", ") || "-";
-        const updateStyleLabel = data.updateStyles.join(", ") || "-";
+    const linesResult: {
+      line: string;
+      styles: {
+        startDate: string;
+        endDate: string;
+        lastStyle: string;
+        updateStyle: string;
+        lastDisplayStyle: string;
+        updateDisplayStyle: string;
+        totalLastReq: number;
+        totalUpdateReq: number;
+        hasShortage: boolean;
+        shortageMachines: string[];
+        hasWorseGap: boolean;
+        hasNewShortage: boolean;
+        hasWorseShortage: boolean;
+        isNewShortage: boolean;
+        isWorseShortage: boolean;
+        styleChanged: boolean;
+        machineBreakdown: {
+          machine: string;
+          available: number;
+          lastReq: number;
+          updateReq: number;
+          gapBefore: number;
+          gapAfter: number;
+          isShortageAfter: boolean;
+          isShortageBefore: boolean;
+          isNewShortage: boolean;
+          isWorseShortage: boolean;
+        }[];
+      }[];
+      hasShortage: boolean;
+      hasWorseGap: boolean;
+      hasNewShortage: boolean;
+      totalShortageMachines: number;
+    }[] = [];
 
-        // Aggregate requirements across all days in the week for this line
-        // For each day, look up the machine requirements for that day's style
-        // Then per machine type, take the MAX requirement across all days (peak demand)
-        const machineMaxLast: Record<string, number> = {};
-        const machineMaxUpdate: Record<string, number> = {};
+    Object.entries(lineSnapsMap).forEach(([line, snaps]) => {
+      snaps.sort((a, b) => a.planningDate.localeCompare(b.planningDate));
 
-        data.daySnapshots.forEach((ds) => {
+      // Exclude line if all snapshots are NO PLANNING
+      const allNoPlan = snaps.every(
+        (s) =>
+          (!s.lastMachineStyle || s.lastMachineStyle.toUpperCase().includes("NO PLAN")) &&
+          (!s.updateMachineStyle || s.updateMachineStyle.toUpperCase().includes("NO PLAN"))
+      );
+      if (allNoPlan) return;
+
+      interface RawPeriod {
+        startDate: string;
+        endDate: string;
+        lastMachineStyle: string;
+        updateMachineStyle: string;
+        lastPPIC: string;
+        updatePPIC: string;
+      }
+
+      const rawPeriods: RawPeriod[] = [];
+
+      snaps.forEach((s) => {
+        const lastP = rawPeriods[rawPeriods.length - 1];
+        if (
+          lastP &&
+          lastP.lastMachineStyle === s.lastMachineStyle &&
+          lastP.updateMachineStyle === s.updateMachineStyle
+        ) {
+          lastP.endDate = s.planningDate;
+        } else {
+          rawPeriods.push({
+            startDate: s.planningDate,
+            endDate: s.planningDate,
+            lastMachineStyle: s.lastMachineStyle || "",
+            updateMachineStyle: s.updateMachineStyle || "",
+            lastPPIC: s.lastPlanningStyle || s.lastMachineStyle || "",
+            updatePPIC: s.updatePlanningStyle || s.updateMachineStyle || "",
+          });
+        }
+      });
+
+      const isACC = line.toUpperCase() === "ACC";
+
+      const styles = rawPeriods.map((p) => {
+        const lastStyle = p.lastMachineStyle || "-";
+        const updateStyle = p.updateMachineStyle || "-";
+
+        const lastReqMap: Record<string, number> = {};
+        const updateReqMap: Record<string, number> = {};
+
+        if (lastStyle && !lastStyle.toUpperCase().includes("NO PLAN")) {
           const lastReqs = requirements.filter(
-            (r) => r.style === ds.lastMachineStyle && r.kebutuhanTotal > 0,
+            (r) =>
+              r.style === lastStyle &&
+              (isACC
+                ? (r.kebutuhanAccessories || 0) > 0
+                : r.kebutuhanTotal > 0)
           );
-          const updateReqs = requirements.filter(
-            (r) => r.style === ds.updateMachineStyle && r.kebutuhanTotal > 0,
-          );
-
           lastReqs.forEach((r) => {
-            machineMaxLast[r.jenisMesin] = Math.max(
-              machineMaxLast[r.jenisMesin] || 0,
-              r.kebutuhanTotal,
-            );
+            const count = isACC
+              ? r.kebutuhanAccessories || 0
+              : r.kebutuhanTotal;
+            lastReqMap[r.jenisMesin] = (lastReqMap[r.jenisMesin] || 0) + count;
           });
+        }
+
+        if (updateStyle && !updateStyle.toUpperCase().includes("NO PLAN")) {
+          const updateReqs = requirements.filter(
+            (r) =>
+              r.style === updateStyle &&
+              (isACC
+                ? (r.kebutuhanAccessories || 0) > 0
+                : r.kebutuhanTotal > 0)
+          );
           updateReqs.forEach((r) => {
-            machineMaxUpdate[r.jenisMesin] = Math.max(
-              machineMaxUpdate[r.jenisMesin] || 0,
-              r.kebutuhanTotal,
-            );
+            const count = isACC
+              ? r.kebutuhanAccessories || 0
+              : r.kebutuhanTotal;
+            updateReqMap[r.jenisMesin] =
+              (updateReqMap[r.jenisMesin] || 0) + count;
           });
-        });
+        }
 
-        const totalLastReq = Object.values(machineMaxLast).reduce(
-          (sum, v) => sum + v,
-          0,
+        const totalLastReq = Object.values(lastReqMap).reduce(
+          (a, b) => a + b,
+          0
         );
-        const totalUpdateReq = Object.values(machineMaxUpdate).reduce(
-          (sum, v) => sum + v,
-          0,
+        const totalUpdateReq = Object.values(updateReqMap).reduce(
+          (a, b) => a + b,
+          0
         );
 
-        // Per-machine breakdown for expandable detail
-        const allMachineTypes = new Set([
-          ...Object.keys(machineMaxLast),
-          ...Object.keys(machineMaxUpdate),
+        const allMachines = new Set([
+          ...Object.keys(lastReqMap),
+          ...Object.keys(updateReqMap),
         ]);
 
-        const machineBreakdown = Array.from(allMachineTypes)
+        const machineBreakdown = Array.from(allMachines)
           .map((machine) => {
-            const lastReq = machineMaxLast[machine] || 0;
-            const updateReq = machineMaxUpdate[machine] || 0;
+            const lastReq = lastReqMap[machine] || 0;
+            const updateReq = updateReqMap[machine] || 0;
             const available =
               weeklyAvailabilities.find(
-                (a) =>
-                  a.jenisMesin.toLowerCase() === machine.toLowerCase(),
+                (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase()
               )?.jumlahMesin || 0;
+
             const gapBefore = available - lastReq;
             const gapAfter = available - updateReq;
 
@@ -1024,86 +1089,77 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
             };
           })
           .sort((a, b) => {
-            // 1. Prioritas paling atas: Mesin yang kekurangan / minus di Plan After (gapAfter < 0)
-            const aShortageAfter = a.gapAfter < 0;
-            const bShortageAfter = b.gapAfter < 0;
-            if (aShortageAfter !== bShortageAfter) {
-              return aShortageAfter ? -1 : 1;
-            }
-
-            // 2. Di antara yang sama-sama shortage di After:
-            // Prioritaskan yang perubahannya membuat minus baru atau makin minus (gap memburuk)
-            const aGapWorse = a.gapAfter < a.gapBefore;
-            const bGapWorse = b.gapAfter < b.gapBefore;
-            if (aShortageAfter && bShortageAfter) {
-              if (aGapWorse !== bGapWorse) {
-                return aGapWorse ? -1 : 1;
-              }
-              // Perubahan gap paling banyak (kebutuhan bertambah paling besar)
-              const aDelta = a.updateReq - a.lastReq;
-              const bDelta = b.updateReq - b.lastReq;
-              if (bDelta !== aDelta) {
-                return bDelta - aDelta;
-              }
-              // Jika delta sama, urutkan dari gapAfter yang paling minus
-              return a.gapAfter - b.gapAfter;
-            }
-
-            // 3. Untuk mesin yang belum minus di After:
-            // Prioritaskan yang gap-nya memburuk (kebutuhan bertambah di After)
-            if (aGapWorse !== bGapWorse) {
-              return aGapWorse ? -1 : 1;
-            }
-
-            // 4. Urutkan berdasarkan perubahan gap yang paling banyak (penambahan kebutuhan terbesar)
-            const aDelta = a.updateReq - a.lastReq;
-            const bDelta = b.updateReq - b.lastReq;
-            if (bDelta !== aDelta) {
-              return bDelta - aDelta;
-            }
-
-            // 5. Jika penambahan kebutuhan sama, urutkan berdasarkan gapAfter terkecil (kapasitas paling ketat)
-            if (a.gapAfter !== b.gapAfter) {
-              return a.gapAfter - b.gapAfter;
-            }
-
-            // 6. Terakhir berdasarkan kebutuhan After terbesar
+            if (a.isShortageAfter !== b.isShortageAfter)
+              return a.isShortageAfter ? -1 : 1;
+            const aWorse = a.gapAfter < a.gapBefore;
+            const bWorse = b.gapAfter < b.gapBefore;
+            if (aWorse !== bWorse) return aWorse ? -1 : 1;
             return b.updateReq - a.updateReq;
           });
 
         const hasShortage = machineBreakdown.some((m) => m.isShortageAfter);
         const hasNewShortage = machineBreakdown.some((m) => m.isNewShortage);
         const hasWorseShortage = machineBreakdown.some((m) => m.isWorseShortage);
-        const styleChanged = lastStyleLabel !== updateStyleLabel;
-
-        // Flag: style changed AND it made the gap worse (more negative)
-        const hasWorseGap = styleChanged && machineBreakdown.some(
-          (m) => m.gapAfter < m.gapBefore,
-        );
+        const styleChanged = lastStyle !== updateStyle;
+        const hasWorseGap =
+          styleChanged && machineBreakdown.some((m) => m.gapAfter < m.gapBefore);
+        const shortageMachines = machineBreakdown
+          .filter((m) => m.isShortageAfter)
+          .map((m) => m.machine);
 
         return {
-          line,
-          lastStyleLabel,
-          updateStyleLabel,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          lastStyle,
+          updateStyle,
+          lastDisplayStyle: p.lastPPIC || lastStyle,
+          updateDisplayStyle: p.updatePPIC || updateStyle,
           totalLastReq,
           totalUpdateReq,
-          machineBreakdown,
           hasShortage,
+          shortageMachines,
+          hasWorseGap,
           hasNewShortage,
           hasWorseShortage,
+          isNewShortage: hasNewShortage,
+          isWorseShortage: hasWorseShortage,
           styleChanged,
-          hasWorseGap,
+          machineBreakdown,
         };
-      })
-      .sort((a, b) => {
-        // Priority: 1) Style changed & gap worse, 2) new shortage, 3) existing shortage, 4) line name
-        if (a.hasWorseGap !== b.hasWorseGap)
-          return a.hasWorseGap ? -1 : 1;
-        if (a.hasNewShortage !== b.hasNewShortage)
-          return a.hasNewShortage ? -1 : 1;
-        if (a.hasShortage !== b.hasShortage) return a.hasShortage ? -1 : 1;
-        return a.line.localeCompare(b.line);
       });
+
+      styles.sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+      const lineHasShortage = styles.some((s) => s.hasShortage);
+      const lineHasWorseGap = styles.some((s) => s.hasWorseGap);
+      const lineHasNewShortage = styles.some((s) => s.hasNewShortage);
+      const totalShortageMachines = styles.reduce(
+        (acc, s) => acc + s.shortageMachines.length,
+        0
+      );
+
+      linesResult.push({
+        line,
+        styles,
+        hasShortage: lineHasShortage,
+        hasWorseGap: lineHasWorseGap,
+        hasNewShortage: lineHasNewShortage,
+        totalShortageMachines,
+      });
+    });
+
+    // Sort lines: worse gap > new shortage > existing shortage > shortage machine count > line name
+    linesResult.sort((a, b) => {
+      if (a.hasWorseGap !== b.hasWorseGap) return a.hasWorseGap ? -1 : 1;
+      if (a.hasNewShortage !== b.hasNewShortage) return a.hasNewShortage ? -1 : 1;
+      if (a.hasShortage !== b.hasShortage) return a.hasShortage ? -1 : 1;
+      if (a.totalShortageMachines !== b.totalShortageMachines) {
+        return b.totalShortageMachines - a.totalShortageMachines;
+      }
+      return a.line.localeCompare(b.line, undefined, { numeric: true });
+    });
+
+    return linesResult;
   }, [
     selectedChartWeek,
     snapshots,
@@ -1481,7 +1537,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         {activeSubTab === "makro" && (
           <div className="w-full flex flex-col gap-6 overflow-x-hidden min-w-0">
             {/* 1. Macro Factory Impact Table */}
-            {factoryImpact && (
+            {(factoryImpact || weeklyComparisonData.chartData.length > 0) && (
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 md:p-6 shrink-0 transition-colors">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                   <div>
@@ -1817,7 +1873,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                       </span>
                     </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[700px] text-sm text-left">
+                      <table className="w-full min-w-[780px] text-sm text-left border-collapse">
                         <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
                           <tr>
                             <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[80px]">
@@ -1835,169 +1891,321 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 ({weeklyComparisonData.updateVersionLabel})
                               </div>
                             </th>
-                            <th className="px-4 py-3 font-semibold text-center text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[120px]">
+                            <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[140px]">
+                              Tanggal
+                            </th>
+                            <th className="px-4 py-3 font-semibold text-center text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
                               <div>Kebutuhan</div>
                               <div className="text-[10px] font-normal opacity-85 mt-0.5">
                                 Before
                               </div>
                             </th>
-                            <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[120px]">
+                            <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[100px]">
                               <div>Kebutuhan</div>
                               <div className="text-[10px] font-normal opacity-85 mt-0.5">
                                 After
                               </div>
                             </th>
+                            <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[80px]">
+                              Detail
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
-                          {selectedWeekLineData.map((row) => {
-                            const isExpanded = expandedLines.has(row.line);
-                            const toggleExpand = () => {
-                              setExpandedLines((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(row.line)) {
-                                  next.delete(row.line);
-                                } else {
-                                  next.add(row.line);
-                                }
-                                return next;
-                              });
-                            };
-
-                            let rowBg = "bg-white dark:bg-slate-900";
-                            let rowBorder = "";
-                            if (row.hasWorseGap) {
-                              rowBg = "bg-red-50 dark:bg-red-950/40";
-                              rowBorder = "border-l-4 border-l-red-500";
-                            } else if (row.hasNewShortage) {
-                              rowBg = "bg-red-50/70 dark:bg-red-900/20";
-                            } else if (row.hasShortage) {
-                              rowBg = "bg-amber-50/50 dark:bg-amber-900/15";
-                            } else if (row.styleChanged) {
-                              rowBg = "bg-blue-50/30 dark:bg-blue-900/10";
-                            }
+                          {selectedWeekLineData.map((lineData) => {
+                            const totalLineRows = lineData.styles.reduce(
+                              (sum, s) =>
+                                sum +
+                                1 +
+                                (expandedLines.has(
+                                  `${lineData.line}_${s.startDate}_${s.updateStyle}_${s.lastStyle}`
+                                )
+                                  ? 1
+                                  : 0),
+                              0
+                            );
 
                             return (
-                              <React.Fragment key={row.line}>
-                                <tr
-                                  className={`${rowBg} ${rowBorder} transition-colors hover:brightness-[0.97] dark:hover:brightness-110 cursor-pointer select-none`}
-                                  onClick={toggleExpand}
-                                >
-                                  <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                                    <div className="flex items-center gap-2">
-                                      <ChevronRight
-                                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                                          isExpanded ? "rotate-90" : ""
-                                        }`}
-                                      />
-                                      <span className={`text-xs font-bold px-2 py-0.5 rounded-md text-white ${
-                                        row.hasWorseGap
-                                          ? "bg-red-600 dark:bg-red-700"
-                                          : "bg-slate-800 dark:bg-slate-700"
-                                      }`}>
-                                        {row.line}
-                                      </span>
-                                      {row.hasWorseGap && (
-                                        <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800/50 animate-pulse">
-                                          <AlertTriangle className="w-3 h-3" />
-                                          Gap ↑
-                                        </span>
+                              <React.Fragment key={lineData.line}>
+                                {lineData.styles.map((style, idx) => {
+                                  const styleKey = `${lineData.line}_${style.startDate}_${style.updateStyle}_${style.lastStyle}`;
+                                  const isExpanded = expandedLines.has(styleKey);
+
+                                  const toggleExpand = () => {
+                                    setExpandedLines((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(styleKey)) {
+                                        next.delete(styleKey);
+                                      } else {
+                                        next.add(styleKey);
+                                      }
+                                      return next;
+                                    });
+                                  };
+
+                                  let rowBg = "bg-white dark:bg-slate-900";
+                                  let rowBorder = "border-l-4 border-l-transparent";
+                                  if (style.hasWorseGap) {
+                                    rowBg = "bg-red-50/60 dark:bg-red-950/35";
+                                    rowBorder = "border-l-4 border-l-red-500";
+                                  } else if (style.hasShortage) {
+                                    rowBg = "bg-amber-50/40 dark:bg-amber-950/20";
+                                    rowBorder = "border-l-4 border-l-amber-500";
+                                  } else if (style.styleChanged) {
+                                    rowBg = "bg-blue-50/30 dark:bg-blue-900/10";
+                                  }
+
+                                  return (
+                                    <React.Fragment key={styleKey}>
+                                      <tr
+                                        className={`${rowBg} ${rowBorder} transition-colors hover:brightness-[0.97] dark:hover:brightness-110 cursor-pointer select-none`}
+                                        onClick={toggleExpand}
+                                      >
+                                        {idx === 0 && (
+                                          <td
+                                            className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200 align-top border-r border-slate-200/60 dark:border-slate-700/60"
+                                            rowSpan={totalLineRows}
+                                          >
+                                            <div className="flex items-center gap-1.5 sticky top-2">
+                                              <span
+                                                className={`text-xs font-bold px-2 py-0.5 rounded-md text-white ${
+                                                  lineData.hasWorseGap
+                                                    ? "bg-red-600 dark:bg-red-700"
+                                                    : lineData.hasShortage
+                                                    ? "bg-amber-600 dark:bg-amber-700"
+                                                    : "bg-slate-800 dark:bg-slate-700"
+                                                }`}
+                                              >
+                                                {lineData.line}
+                                              </span>
+                                              {lineData.hasWorseGap && (
+                                                <span
+                                                  className="flex items-center gap-0.5 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800/50 animate-pulse"
+                                                  title="Line ini memiliki perubahan style yang memperparah kekurangan mesin (Gap memburuk)"
+                                                >
+                                                  <AlertTriangle className="w-3 h-3" />
+                                                  Gap ↑
+                                                </span>
+                                              )}
+                                            </div>
+                                          </td>
+                                        )}
+
+                                        {/* Style Before */}
+                                        <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
+                                          <span className="font-medium">
+                                            {style.lastDisplayStyle || style.lastStyle}
+                                          </span>
+                                        </td>
+
+                                        {/* Style After */}
+                                        <td className="px-4 py-3 text-xs max-w-[240px]">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span
+                                              className={`font-semibold ${
+                                                style.hasWorseGap
+                                                  ? "text-red-700 dark:text-red-300 font-bold"
+                                                  : style.hasShortage
+                                                  ? "text-amber-700 dark:text-amber-300 font-bold"
+                                                  : "text-slate-800 dark:text-slate-200"
+                                              }`}
+                                            >
+                                              {style.updateDisplayStyle || style.updateStyle}
+                                            </span>
+                                            {style.hasShortage && (
+                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800/70 shadow-sm animate-pulse">
+                                                <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
+                                                <span>
+                                                  Shortage ({style.shortageMachines.join(", ")})
+                                                </span>
+                                              </span>
+                                            )}
+                                            {style.styleChanged && !style.hasShortage && (
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                                                Ganti Style
+                                              </span>
+                                            )}
+                                          </div>
+                                        </td>
+
+                                        {/* Tanggal */}
+                                        <td
+                                          className={`px-4 py-3 text-center whitespace-nowrap text-xs ${
+                                            style.hasShortage
+                                              ? "text-red-800 dark:text-red-300 font-medium"
+                                              : "text-slate-600 dark:text-slate-300"
+                                          }`}
+                                        >
+                                          {style.startDate ? (
+                                            style.startDate === style.endDate ? (
+                                              format(
+                                                new Date(style.startDate + "T00:00:00"),
+                                                "dd MMM yyyy"
+                                              )
+                                            ) : (
+                                              <span>
+                                                {format(
+                                                  new Date(style.startDate + "T00:00:00"),
+                                                  "dd MMM yyyy"
+                                                )}
+                                                <span className="text-slate-400 dark:text-slate-500 mx-1 font-normal">
+                                                  s/d
+                                                </span>
+                                                {format(
+                                                  new Date(style.endDate + "T00:00:00"),
+                                                  "dd MMM yyyy"
+                                                )}
+                                              </span>
+                                            )
+                                          ) : (
+                                            "-"
+                                          )}
+                                        </td>
+
+                                        {/* Kebutuhan Before */}
+                                        <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap text-xs">
+                                          {style.totalLastReq || "-"}
+                                        </td>
+
+                                        {/* Kebutuhan After */}
+                                        <td
+                                          className={`px-4 py-3 text-center font-bold whitespace-nowrap text-xs ${
+                                            style.hasWorseGap
+                                              ? "text-red-600 dark:text-red-400"
+                                              : style.hasShortage
+                                              ? "text-amber-600 dark:text-amber-400"
+                                              : "text-indigo-600 dark:text-indigo-400"
+                                          }`}
+                                        >
+                                          {style.totalUpdateReq || "-"}
+                                        </td>
+
+                                        {/* Detail Button */}
+                                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleExpand();
+                                            }}
+                                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors border shadow-sm ${
+                                              isExpanded
+                                                ? "bg-indigo-600 text-white border-indigo-600 shadow-indigo-500/20"
+                                                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                            }`}
+                                            title="Lihat detail kebutuhan mesin style ini"
+                                          >
+                                            <span>Mesin</span>
+                                            <ChevronDown
+                                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                                isExpanded ? "rotate-180" : ""
+                                              }`}
+                                            />
+                                          </button>
+                                        </td>
+                                      </tr>
+
+                                      {/* Expanded machine breakdown for THIS style period */}
+                                      {isExpanded && (
+                                        <tr>
+                                          <td
+                                            colSpan={6}
+                                            className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60"
+                                          >
+                                            <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-inner">
+                                              <div className="px-4 py-2 bg-slate-100 dark:bg-slate-700/60 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                                                <span>
+                                                  Breakdown Kebutuhan Mesin: <strong>{style.updateDisplayStyle || style.updateStyle}</strong>
+                                                </span>
+                                              </div>
+                                              {style.machineBreakdown.length === 0 ? (
+                                                <div className="p-3 text-center text-xs text-slate-400">
+                                                  Tidak ada kebutuhan mesin untuk style ini.
+                                                </div>
+                                              ) : (
+                                                <table className="w-full text-xs">
+                                                  <thead>
+                                                    <tr className="bg-slate-50 dark:bg-slate-700/40 text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-700/80">
+                                                      <th className="px-4 py-2 text-left font-semibold">
+                                                        Jenis Mesin
+                                                      </th>
+                                                      <th className="px-4 py-2 text-center font-semibold text-emerald-600 dark:text-emerald-400">
+                                                        Tersedia
+                                                      </th>
+                                                      <th className="px-4 py-2 text-center font-semibold text-slate-600 dark:text-slate-400">
+                                                        Kebutuhan Before ({weeklyComparisonData.lastVersionLabel})
+                                                      </th>
+                                                      <th className="px-4 py-2 text-center font-semibold text-indigo-600 dark:text-indigo-400">
+                                                        Kebutuhan After ({weeklyComparisonData.updateVersionLabel})
+                                                      </th>
+                                                      <th className="px-4 py-2 text-center font-semibold">
+                                                        Status
+                                                      </th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
+                                                    {style.machineBreakdown.map((m) => {
+                                                      const isShortage = m.available < m.updateReq;
+                                                      const isReqIncreased = m.updateReq > m.lastReq;
+
+                                                      let mRowBg =
+                                                        "hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors";
+                                                      if (isShortage) {
+                                                        mRowBg += " bg-red-50/60 dark:bg-red-950/25";
+                                                      } else if (isReqIncreased) {
+                                                        mRowBg += " bg-amber-50/40 dark:bg-amber-950/20";
+                                                      }
+
+                                                      return (
+                                                        <tr key={m.machine} className={mRowBg}>
+                                                          <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">
+                                                            {m.machine}
+                                                          </td>
+                                                          <td className="px-4 py-2 text-center font-medium text-slate-600 dark:text-slate-300">
+                                                            {m.available}
+                                                          </td>
+                                                          <td className="px-4 py-2 text-center font-medium text-slate-500 dark:text-slate-400">
+                                                            {m.lastReq}
+                                                          </td>
+                                                          <td
+                                                            className={`px-4 py-2 text-center font-bold ${
+                                                              isShortage
+                                                                ? "text-red-600 dark:text-red-400"
+                                                                : isReqIncreased
+                                                                ? "text-indigo-600 dark:text-indigo-400"
+                                                                : "text-slate-700 dark:text-slate-200"
+                                                            }`}
+                                                          >
+                                                            {m.updateReq}
+                                                          </td>
+                                                          <td className="px-4 py-2 text-center">
+                                                            {isShortage ? (
+                                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                                                Shortage ({m.gapAfter})
+                                                              </span>
+                                                            ) : isReqIncreased ? (
+                                                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                                                                Naik (+{m.updateReq - m.lastReq})
+                                                              </span>
+                                                            ) : (
+                                                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                                Aman
+                                                              </span>
+                                                            )}
+                                                          </td>
+                                                        </tr>
+                                                      );
+                                                    })}
+                                                  </tbody>
+                                                </table>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
                                       )}
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
-                                    <span className="line-clamp-2">{row.lastStyleLabel}</span>
-                                  </td>
-                                  <td className={`px-4 py-3 text-xs font-medium max-w-[220px] ${
-                                    row.hasWorseGap
-                                      ? "text-red-700 dark:text-red-300"
-                                      : "text-slate-800 dark:text-slate-200"
-                                  }`}>
-                                    <span className="line-clamp-2">{row.updateStyleLabel}</span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
-                                    {row.totalLastReq || "-"}
-                                  </td>
-                                  <td className={`px-4 py-3 text-center font-bold whitespace-nowrap ${
-                                    row.hasWorseGap
-                                      ? "text-red-600 dark:text-red-400"
-                                      : "text-indigo-600 dark:text-indigo-400"
-                                  }`}>
-                                    {row.totalUpdateReq || "-"}
-                                  </td>
-                                </tr>
-
-                                {/* Expanded machine breakdown */}
-                                {isExpanded && row.machineBreakdown.length > 0 && (
-                                  <tr>
-                                    <td colSpan={5} className="p-0">
-                                      <div className="bg-slate-50/80 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-700 overflow-x-auto">
-                                        <table className="w-full text-xs">
-                                          <thead>
-                                            <tr className="bg-slate-100/90 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-700/80">
-                                              <th className="px-6 py-2.5 font-semibold text-left min-w-[180px]">
-                                                Jenis Mesin
-                                              </th>
-                                              <th className="px-4 py-2.5 font-semibold text-center text-emerald-600 dark:text-emerald-400 whitespace-nowrap min-w-[90px]">
-                                                Tersedia
-                                              </th>
-                                              <th className="px-4 py-2.5 font-semibold text-center text-slate-600 dark:text-slate-400 min-w-[150px]">
-                                                <div>Kebutuhan Before</div>
-                                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                                  ({weeklyComparisonData.lastVersionLabel})
-                                                </div>
-                                              </th>
-                                              <th className="px-4 py-2.5 font-semibold text-center text-indigo-600 dark:text-indigo-400 min-w-[150px]">
-                                                <div>Kebutuhan After</div>
-                                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                                  ({weeklyComparisonData.updateVersionLabel})
-                                                </div>
-                                              </th>
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
-                                            {row.machineBreakdown.map((m) => {
-                                              const isShortage = m.available < m.updateReq;
-                                              const isReqIncreased = m.updateReq > m.lastReq;
-
-                                              let mRowBg = "hover:bg-slate-100/60 dark:hover:bg-slate-700/40 transition-colors";
-                                              if (isShortage) {
-                                                mRowBg += " bg-red-50/60 dark:bg-red-950/25";
-                                              } else if (isReqIncreased) {
-                                                mRowBg += " bg-amber-50/40 dark:bg-amber-950/20";
-                                              }
-
-                                              return (
-                                                <tr key={m.machine} className={mRowBg}>
-                                                  <td className="px-6 py-2.5 font-medium text-slate-700 dark:text-slate-200">
-                                                    {m.machine}
-                                                  </td>
-                                                  <td className="px-4 py-2.5 text-center font-medium text-slate-600 dark:text-slate-300">
-                                                    {m.available}
-                                                  </td>
-                                                  <td className="px-4 py-2.5 text-center font-medium text-slate-500 dark:text-slate-400">
-                                                    {m.lastReq}
-                                                  </td>
-                                                  <td
-                                                    className={`px-4 py-2.5 text-center font-bold ${
-                                                      isShortage
-                                                        ? "text-red-600 dark:text-red-400"
-                                                        : isReqIncreased
-                                                        ? "text-indigo-600 dark:text-indigo-400"
-                                                        : "text-slate-700 dark:text-slate-200"
-                                                    }`}
-                                                  >
-                                                    {m.updateReq}
-                                                  </td>
-                                                </tr>
-                                              );
-                                            })}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
+                                    </React.Fragment>
+                                  );
+                                })}
                               </React.Fragment>
                             );
                           })}

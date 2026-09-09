@@ -17,11 +17,94 @@ import {
   AvailabilityVariation,
 } from '../types/mrp';
 
+/**
+ * Checks whether a given date string represents a Sunday.
+ * Timezone-safe by extracting year, month, and day components directly.
+ */
+export const isSunday = (dateStr?: string | null): boolean => {
+  if (!dateStr) return false;
+  const cleanStr = String(dateStr).split("T")[0].trim();
+  const sep = cleanStr.includes("-") ? "-" : cleanStr.includes("/") ? "/" : null;
+  if (sep) {
+    const parts = cleanStr.split(sep);
+    if (parts.length === 3) {
+      let year: number, month: number, day: number;
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD or YYYY/MM/DD
+        year = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10) - 1;
+        day = parseInt(parts[2], 10);
+      } else {
+        // DD-MM-YYYY or DD/MM/YYYY
+        day = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10) - 1;
+        year = parseInt(parts[2], 10);
+      }
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return new Date(year, month, day).getDay() === 0;
+      }
+    }
+  }
+  const parsed = new Date(dateStr);
+  return !isNaN(parsed.getTime()) && parsed.getDay() === 0;
+};
+
+/**
+ * Excludes records that have their planning date on Sunday.
+ */
+export const excludeSundays = <T extends { date?: string; planningDate?: string }>(
+  items: T[]
+): T[] => {
+  return items.filter((item) => {
+    const d = item.date || item.planningDate || "";
+    return !isSunday(d);
+  });
+};
+
+/**
+ * Identifies lines where ALL plans have "NO PLANNING" as the style (case-insensitive).
+ * These lines should be excluded from all calculations and displays.
+ * Also excludes Sunday plans.
+ */
+export const excludeNoPlanningOnlyLines = (
+  plans: ProductionPlan[]
+): ProductionPlan[] => {
+  // First ensure no Sunday plans are included
+  const nonSundayPlans = plans.filter(p => !isSunday(p.date));
+
+  // Group plans by line
+  const plansByLine: Record<string, ProductionPlan[]> = {};
+  nonSundayPlans.forEach(plan => {
+    if (!plansByLine[plan.line]) plansByLine[plan.line] = [];
+    plansByLine[plan.line].push(plan);
+  });
+
+  // Identify lines where ALL styles are "NO PLANNING"
+  const noPlanningOnlyLines = new Set<string>();
+  Object.entries(plansByLine).forEach(([line, linePlans]) => {
+    const allNoPlanning = linePlans.every(p => {
+      const style = (p.style || "").trim().toUpperCase();
+      const displayStyle = (p.displayStyle || "").trim().toUpperCase();
+      return style === "NO PLANNING" || displayStyle === "NO PLANNING";
+    });
+    if (allNoPlanning) {
+      noPlanningOnlyLines.add(line);
+    }
+  });
+
+  // Filter out plans belonging to NO PLANNING-only lines
+  return nonSundayPlans.filter(plan => !noPlanningOnlyLines.has(plan.line));
+};
+
 export const filterProductionPlans = (
   plans: ProductionPlan[],
   filter: FilterState
 ): ProductionPlan[] => {
-  return plans.filter((plan) => {
+  // First filter by date range and exclude Sundays
+  const dateFiltered = plans.filter((plan) => {
+    if (isSunday(plan.date)) {
+      return false;
+    }
     if (filter.startDate && plan.date < filter.startDate) {
       return false;
     }
@@ -30,6 +113,9 @@ export const filterProductionPlans = (
     }
     return true;
   });
+
+  // Then exclude lines that only have "NO PLANNING" in the filtered range
+  return excludeNoPlanningOnlyLines(dateFiltered);
 };
 
 /**
@@ -46,6 +132,7 @@ export const calculateMachineRequirements = (
   const linesPerDate: Record<string, string[]> = {};
   
   plans.forEach(plan => {
+    if (isSunday(plan.date)) return;
     const key = `${plan.date}|${plan.line}`;
     // Overwrites previous styles for the same date and line, keeping only the last one
     finalStylePerDateLine[key] = plan.style;
@@ -203,8 +290,9 @@ export const buildLineMachineMatrix = (
   plans: ProductionPlan[],
   requirements: MachineRequirementPerStyle[]
 ): LineMachineMatrixRow[] => {
+  const nonSundayPlans = plans.filter(p => !isSunday(p.date));
   const finalStylePerDateLine: Record<string, ProductionPlan> = {};
-  plans.forEach(plan => {
+  nonSundayPlans.forEach(plan => {
     const key = `${plan.date}|${plan.line}`;
     finalStylePerDateLine[key] = plan;
   });
@@ -215,11 +303,11 @@ export const buildLineMachineMatrix = (
     reqsByStyle[req.style].push(req);
   });
 
-  const dates = Array.from(new Set(plans.map(p => p.date)));
+  const dates = Array.from(new Set(nonSundayPlans.map(p => p.date)));
   const result: LineMachineMatrixRow[] = [];
 
   dates.forEach(date => {
-    const datePlans = plans.filter(p => p.date === date);
+    const datePlans = nonSundayPlans.filter(p => p.date === date);
     const finalPlanPerLine: Record<string, ProductionPlan> = {};
     datePlans.forEach(p => finalPlanPerLine[p.line] = p);
 
@@ -291,6 +379,7 @@ export const getMachineDrillDown = (
 
   const finalStylePerDateLine: Record<string, ProductionPlan> = {};
   plans.forEach(plan => {
+    if (isSunday(plan.date)) return;
     const key = `${plan.date}|${plan.line}`;
     finalStylePerDateLine[key] = plan;
   });
@@ -351,15 +440,12 @@ export const getMachineDrillDown = (
       : 0;
 
   // Generate actionable IE recommendation
-  let recommendation = '';
-  if (gap < 0) {
-    const deficit = Math.abs(gap);
-    recommendation = `⚠️ PERINGATAN KEKURANGAN: Terdapat total defisit sebanyak ${deficit} unit untuk mesin ${machineType}. Rekomendasi: Pinjam ${deficit} mesin dari inventaris cadangan (buffer offline) atau minta transfer/sewa sementara dari line yang sedang tidak aktif. Evaluasi juga pelatihan silang (cross-training) operator agar mesin dapat dipakai bersama pada stasiun yang berdekatan.`;
-  } else if (gap === 0) {
-    recommendation = `✅ SEIMBANG: Utilitas kapasitas tepat 100% (Kebutuhan: ${totalRequired} vs Ketersediaan: ${totalAvailable}). Lakukan jadwal perawatan rutin (preventive maintenance); hari ini tidak ada mesin cadangan yang tersisa di pabrik untuk tipe mesin ini.`;
-  } else {
-    recommendation = `💡 SURPLUS / TERSEDIA: Terdapat ${gap} unit cadangan di inventaris pabrik (Kebutuhan: ${totalRequired} vs Ketersediaan: ${totalAvailable}). Mesin ini dapat dialokasikan untuk pergantian style berikutnya atau dirotasi untuk perawatan berkala.`;
-  }
+  const recommendation =
+    gap < 0
+      ? `⚠️ PERINGATAN KEKURANGAN: Terdapat total defisit sebanyak ${Math.abs(gap)} unit untuk mesin ${machineType}. Rekomendasi: Pinjam ${Math.abs(gap)} mesin dari inventaris cadangan (buffer offline) atau minta transfer/sewa sementara dari line yang sedang tidak aktif. Evaluasi juga pelatihan silang (cross-training) operator agar mesin dapat dipakai bersama pada stasiun yang berdekatan.`
+      : gap === 0
+      ? `✅ SEIMBANG: Utilitas kapasitas tepat 100% (Kebutuhan: ${totalRequired} vs Ketersediaan: ${totalAvailable}). Lakukan jadwal perawatan rutin (preventive maintenance); hari ini tidak ada mesin cadangan yang tersisa di pabrik untuk tipe mesin ini.`
+      : `💡 SURPLUS / TERSEDIA: Terdapat ${gap} unit cadangan di inventaris pabrik (Kebutuhan: ${totalRequired} vs Ketersediaan: ${totalAvailable}). Mesin ini dapat dialokasikan untuk pergantian style berikutnya atau dirotasi untuk perawatan berkala.`;
 
   return {
     machine: machineType,
@@ -377,13 +463,14 @@ export const getMachineDrillDown = (
  * Extracts unique filter options from the dataset
  */
 export const getFilterOptions = (plans: ProductionPlan[]) => {
-  const dates = Array.from(new Set(plans.map((p) => p.date))).sort();
-  const weeks = Array.from(new Set(plans.map((p) => p.week || ""))).filter(w => w).sort();
+  const nonSundayPlans = plans.filter(p => !isSunday(p.date));
+  const dates = Array.from(new Set(nonSundayPlans.map((p) => p.date))).sort();
+  const weeks = Array.from(new Set(nonSundayPlans.map((p) => p.week || ""))).filter(w => w).sort();
   const months = Array.from(
-    new Set(plans.map((p) => p.date.substring(0, 7)))
+    new Set(nonSundayPlans.map((p) => p.date.substring(0, 7)))
   ).sort();
-  const lines = Array.from(new Set(plans.map((p) => p.line))).sort();
-  const styles = Array.from(new Set(plans.map((p) => p.style))).sort();
+  const lines = Array.from(new Set(nonSundayPlans.map((p) => p.line))).sort();
+  const styles = Array.from(new Set(nonSundayPlans.map((p) => p.style))).sort();
 
   return { dates, weeks, months, lines, styles };
 };
@@ -419,6 +506,32 @@ export const generateHeatmapData = (
   };
 };
 
+export const NATIONAL_HOLIDAYS_2026 = [
+  "2026-01-01", // Tahun Baru 2026 Masehi
+  "2026-01-16", // Isra Mi'raj Nabi Muhammad SAW
+  "2026-02-17", // Tahun Baru Imlek 2577 Kongzili
+  "2026-03-19", // Hari Suci Nyepi (Tahun Baru Saka 1948)
+  "2026-03-20", // Hari Raya Idul Fitri 1447 H
+  "2026-03-21", // Hari Raya Idul Fitri 1447 H
+  "2026-04-03", // Wafat Yesus Kristus
+  "2026-04-05", // Hari Paskah
+  "2026-05-01", // Hari Buruh Internasional
+  "2026-05-14", // Kenaikan Yesus Kristus
+  "2026-05-27", // Hari Raya Idul Adha 1447 H
+  "2026-05-31", // Hari Raya Waisak 2570 BE
+  "2026-06-01", // Hari Lahir Pancasila
+  "2026-06-16", // Tahun Baru Islam 1448 H
+  "2026-08-17", // Proklamasi Kemerdekaan RI
+  "2026-08-25", // Maulid Nabi Muhammad SAW
+  "2026-12-25", // Hari Raya Natal
+];
+
+export const isHoliday = (dateStr?: string | null): boolean => {
+  if (!dateStr) return false;
+  const cleanStr = String(dateStr).split("T")[0].trim();
+  return NATIONAL_HOLIDAYS_2026.includes(cleanStr);
+};
+
 /**
  * Gets the trend of machine gaps over time, skipping Sundays and specified holidays.
  */
@@ -427,7 +540,7 @@ export const getGapTrendData = (
   requirements: MachineRequirementPerStyle[],
   availabilities: MachineAvailability[],
   rentalTrialRecords: RentalTrialRecord[],
-  holidays: string[] = ["2026-08-17", "2026-08-25"]
+  holidays: string[] = NATIONAL_HOLIDAYS_2026
 ): TrendDataPoint[] => {
   if (plans.length === 0) return [];
 
@@ -443,11 +556,13 @@ export const getGapTrendData = (
   const currentDate = new Date(startDate);
 
   while (currentDate <= endDate) {
-    const dateStr = currentDate.toISOString().split("T")[0];
-    const dayOfWeek = currentDate.getDay(); // 0 is Sunday
+    const yyyy = currentDate.getFullYear();
+    const mm = String(currentDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(currentDate.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
     
     // Include if it's not Sunday AND not a holiday
-    if (dayOfWeek !== 0 && !holidays.includes(dateStr)) {
+    if (!isSunday(dateStr) && !holidays.includes(dateStr)) {
       dateRange.push(dateStr);
     }
     currentDate.setDate(currentDate.getDate() + 1);
@@ -589,6 +704,7 @@ export const getStyleShortagesData = (
   const styleDisplayNames: Record<string, string> = {};
 
   plans.forEach(plan => {
+    if (isSunday(plan.date)) return;
     if (plan.style && !String(plan.style).toLowerCase().includes("no plan")) {
       if (!activeStylesPerDate[plan.date]) activeStylesPerDate[plan.date] = new Set();
       activeStylesPerDate[plan.date].add(String(plan.style));
@@ -599,6 +715,7 @@ export const getStyleShortagesData = (
 
   const finalStylePerDateLine: Record<string, string> = {};
   plans.forEach(plan => {
+    if (isSunday(plan.date)) return;
     finalStylePerDateLine[`${plan.date}|${plan.line}`] = String(plan.style);
   });
 
@@ -732,6 +849,7 @@ export const getMachineShortagesData = (
 
   const finalStylePerDateLine: Record<string, string> = {};
   plans.forEach(plan => {
+    if (isSunday(plan.date)) return;
     if (plan.style && !String(plan.style).toLowerCase().includes("no plan")) {
       finalStylePerDateLine[`${plan.date}|${plan.line}`] = String(plan.style);
     }
@@ -917,17 +1035,22 @@ export const getAdjustedAvailabilityForDateRange = (
 
   const datesInRange: string[] = [];
   const current = new Date(start);
-  const isSingleDay = start.getTime() === end.getTime();
   
   while (current <= end) {
-    // Skip Sunday (0) unless it's a single day selection
-    if (current.getDay() !== 0 || isSingleDay) {
-      const yyyy = current.getFullYear();
-      const mm = String(current.getMonth() + 1).padStart(2, '0');
-      const dd = String(current.getDate()).padStart(2, '0');
-      datesInRange.push(`${yyyy}-${mm}-${dd}`);
+    const yyyy = current.getFullYear();
+    const mm = String(current.getMonth() + 1).padStart(2, '0');
+    const dd = String(current.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+
+    // Skip Sunday (0)
+    if (!isSunday(dateStr)) {
+      datesInRange.push(dateStr);
     }
     current.setDate(current.getDate() + 1);
+  }
+
+  if (datesInRange.length === 0) {
+    return availabilities;
   }
 
   // If only one day, min and max are the same
@@ -946,7 +1069,7 @@ export const getAdjustedAvailabilityForDateRange = (
     let maxAvail = -1;
     let minAvailObj = baseAvail;
     
-    let variationDetails: AvailabilityVariation[] = [];
+    const variationDetails: AvailabilityVariation[] = [];
     let currentPeriod: AvailabilityVariation | null = null;
     let prevDateStr = "";
 
