@@ -6,9 +6,10 @@ import {
   Clock,
   BarChart2,
   Bell,
+  Wrench,
 } from "lucide-react";
 
-export type TabValue = "preview" | "summary" | "detail" | "history" | "chart" | "alerts";
+export type TabValue = "preview" | "summary" | "detail" | "history" | "chart" | "downtime" | "alerts";
 
 interface SidebarProps {
   activeTab: TabValue;
@@ -51,6 +52,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: "chart",
       label: "Analytics",
       icon: <BarChart2 className="w-5 h-5" />,
+    },
+    {
+      id: "downtime",
+      label: "Downtime Mesin",
+      icon: <Wrench className="w-5 h-5" />,
     },
     {
       id: "alerts",

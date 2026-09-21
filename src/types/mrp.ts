@@ -188,3 +188,24 @@ export interface InventoryRecord {
   umur: string;           // Col M: UMUR (format: "X thn Y bln")
   umurBulan: number;      // Parsed total months from UMUR column
 }
+
+// Data from the "DOWNTIME LOG" sheet — machine downtime records
+export interface DowntimeRecord {
+  line: string;              // Col A: Line (e.g. "A01", "A02")
+  downtimeStartNum: number;  // Col B: # Downtime Start (serial number)
+  prodMachType: string;      // Col C: Prod Mach Type (e.g. "SN", "WF", "DN") — tipe mesin jahit
+  prodMach: string;          // Col D: Prod Mach (e.g. "JUKI", "MITSUBISHI") — merk mesin
+  downtimeStopNum: number;   // Col E: # Downtime Stop (serial number)
+  downtimeStart: string;     // Col F: Downtime Start (datetime string)
+  downtimeStop: string;      // Col G: Downtime Stop (datetime string)
+  jamKerja: number;          // Col H: Jam Kerja (total work hours for the line that day)
+  downtimeTotal: number;     // Col I: Downtime Total (minutes, raw calculation)
+  nameDayStart: string;      // Col J: Name Day Start (e.g. "Thursday")
+  nameDayStop: string;       // Col K: Name Day Stop
+  sameDay: boolean;          // Col L: Same Day?
+  tanggal: string;           // Col M: Tanggal (date YYYY-MM-DD)
+  week: string;              // Col N: Week
+  errorMessage: string;      // Col AI: Error Message
+  excessTime: number;        // Col AS: Excess Time
+  downtimeAktual: number;    // Col AT: Downtime Aktual (minutes) — KOLOM UTAMA YANG DIGUNAKAN
+}

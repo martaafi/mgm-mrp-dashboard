@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
-import { fetchAllMRPData } from "./utils/googleSheetsAPI";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { fetchAllMRPData, fetchDowntimeData, CACHE_KEYS } from "./utils/googleSheetsAPI";
 import {
   ProductionPlan,
   SnapshotRecord,
@@ -7,6 +7,7 @@ import {
   MachineAvailability,
   RentalTrialRecord,
   InventoryRecord,
+  DowntimeRecord,
   FilterState,
 } from "./types/mrp";
 import {
@@ -36,6 +37,7 @@ import { IEAssistantModal } from "./components/modals/IEAssistantModal";
 import { InitialReminderModal } from "./components/modals/InitialReminderModal";
 import { RentalAlertsDashboard } from "./components/dashboard/RentalAlertsDashboard";
 import { PreviewDashboard } from "./components/dashboard/PreviewDashboard";
+import { DowntimeDashboard } from "./components/dashboard/DowntimeDashboard";
 
 export default function App() {
   // 1. Core Data States
@@ -49,6 +51,11 @@ export default function App() {
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [rentalTrialRecords, setRentalTrialRecords] = useState<RentalTrialRecord[]>([]);
   const [inventoryRecords, setInventoryRecords] = useState<InventoryRecord[]>([]);
+  const [downtimeRecords, setDowntimeRecords] = useState<DowntimeRecord[]>([]);
+  const [downtimeSource, setDowntimeSource] = useState<"apps_script" | "gviz" | "cache">("gviz");
+  const [isDowntimeRetrying, setIsDowntimeRetrying] = useState(false);
+  const [downtimeRetry, setDowntimeRetry] = useState<{ attempt: number; maxAttempts: number } | null>(null);
+  const downtimeRetryAbortRef = useRef<AbortController | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -69,6 +76,8 @@ export default function App() {
       setSnapshots(data.snapshots);
       setRentalTrialRecords(data.rentalTrialRecords || []);
       setInventoryRecords(data.inventoryRecords || []);
+      setDowntimeRecords(data.downtimeRecords || []);
+      setDowntimeSource(data.downtimeSource || "gviz");
       setLastUpdated(data.lastUpdated);
     } catch (err: any) {
       setError(err.message || "Failed to load data from Google Sheets");
@@ -82,8 +91,56 @@ export default function App() {
     loadData(false);
   }, []);
 
+  // Batalkan retry downtime yang sedang berjalan saat App unmount
+  useEffect(() => {
+    return () => {
+      downtimeRetryAbortRef.current?.abort();
+    };
+  }, []);
+
   const handleRefreshData = () => {
     loadData(true);
+  };
+
+  // Refresh KHUSUS downtime (dipakai tab Downtime): hanya fetch ulang data
+  // downtime via Apps Script dengan bounded auto-retry (maks 4x), tanpa
+  // me-refetch sheet lain. Batal via cancelDowntimeRetry.
+  const refreshDowntimeOnly = async () => {
+    if (isDowntimeRetrying) return;
+    const controller = new AbortController();
+    downtimeRetryAbortRef.current = controller;
+    setIsDowntimeRetrying(true);
+    setDowntimeRetry({ attempt: 1, maxAttempts: 4 });
+    try {
+      const result = await fetchDowntimeData({
+        maxAttempts: 4,
+        signal: controller.signal,
+        onAttempt: (attempt, maxAttempts) =>
+          setDowntimeRetry({ attempt, maxAttempts }),
+      });
+      setDowntimeRecords(result.records || []);
+      setDowntimeSource(result.source || "gviz");
+      try {
+        localStorage.setItem(CACHE_KEYS.DOWNTIME, JSON.stringify(result.records));
+        localStorage.setItem(CACHE_KEYS.DOWNTIME_SOURCE, result.source);
+      } catch (e) {
+        console.warn("Failed to write downtime cache:", e);
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        console.log("[Downtime] Retry dibatalkan user, data lama dipertahankan.");
+      } else {
+        console.warn("[Downtime] refreshDowntimeOnly error:", err);
+      }
+    } finally {
+      setIsDowntimeRetrying(false);
+      setDowntimeRetry(null);
+      downtimeRetryAbortRef.current = null;
+    }
+  };
+
+  const cancelDowntimeRetry = () => {
+    downtimeRetryAbortRef.current?.abort();
   };
 
   const getTodayStr = () => {
@@ -103,10 +160,10 @@ export default function App() {
     endDate: getTodayStr(),
   });
 
-  // Chart / Analytics filters (Default: Empty = Overall/Semua Tanggal)
-  const [chartFilters, setChartFilters] = useState<FilterState>({
-    startDate: "",
-    endDate: "",
+  // Chart / Analytics filters (Default: Today)
+  const [chartFilters, setChartFilters] = useState<FilterState>(() => {
+    const today = getTodayStr();
+    return { startDate: today, endDate: today };
   });
 
   // 3. Modal / Navigation States
@@ -423,6 +480,7 @@ export default function App() {
               snapshots={cleanedSnapshots}
               rentalTrialRecords={rentalTrialRecords}
               inventoryRecords={inventoryRecords}
+              downtimeRecords={downtimeRecords}
               onNavigateTab={setActiveTab}
               lastUpdated={lastUpdated}
             />
@@ -482,6 +540,17 @@ export default function App() {
           {activeTab === "alerts" && (
             <RentalAlertsDashboard
               rentalTrialRecords={rentalTrialRecords}
+            />
+          )}
+
+          {activeTab === "downtime" && (
+            <DowntimeDashboard
+              downtimeRecords={downtimeRecords}
+              downtimeSource={downtimeSource}
+              onRefreshData={refreshDowntimeOnly}
+              isDowntimeRetrying={isDowntimeRetrying}
+              downtimeRetry={downtimeRetry}
+              onCancelDowntimeRetry={cancelDowntimeRetry}
             />
           )}
           </main>

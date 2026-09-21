@@ -49,6 +49,56 @@ interface ChartDashboardProps {
   filters?: FilterState;
 }
 
+// Custom Bar shape: tidak menggambar apa pun untuk segmen bernilai 0,
+// tapi rect-nya tetap didaftarkan sehingga LabelList total tampil di
+// SEMUA kolom. (Recharts membuang rect berukuran 0 dari data label,
+// sehingga tanpa ini label hanya muncul di kolom yang segmen teratasnya > 0.)
+const renderVisibleShapeOnly = (props: any) => {
+  const { x, y, width, height, fill, value } = props;
+  if (value === 0 || !width || !height) return null;
+  return <rect x={x} y={y} width={width} height={height} fill={fill} />;
+};
+
+// Custom tick sumbu X: teks miring dengan wrap maksimal 2 baris
+// (kata dibagi seimbang supaya tidak terpotong).
+const renderAngledWrappedXTick = (props: any) => {
+  const { x, y, payload } = props;
+  const words = String(payload?.value ?? "")
+    .split(" ")
+    .filter(Boolean);
+  let lines: string[] = words;
+  if (words.length > 1) {
+    let best = 1;
+    let bestDiff = Infinity;
+    for (let i = 1; i < words.length; i++) {
+      const a = words.slice(0, i).join(" ").length;
+      const b = words.slice(i).join(" ").length;
+      const diff = Math.abs(a - b);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = i;
+      }
+    }
+    lines = [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+  }
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="end"
+      transform={`rotate(-35 ${x} ${y})`}
+      fontSize={9}
+      fill="#94a3b8"
+    >
+      {lines.map((line, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? 5 : 11}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+};
+
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: any }
@@ -76,11 +126,11 @@ class ErrorBoundary extends React.Component<
 }
 
 const AGE_BRACKETS = [
-  { label: "< 1 tahun", min: 0, max: 11, color: "#10b981" },
-  { label: "1 - 2 tahun", min: 12, max: 23, color: "#22d3ee" },
-  { label: "2 - 5 tahun", min: 24, max: 59, color: "#f59e0b" },
-  { label: "5 - 10 tahun", min: 60, max: 119, color: "#f97316" },
-  { label: "> 10 tahun", min: 120, max: Infinity, color: "#ef4444" },
+  { label: "< 1 tahun", min: 0, max: 11, color: "#3b82f6" },
+  { label: "1 - 2 tahun", min: 12, max: 23, color: "#3b82f6" },
+  { label: "2 - 5 tahun", min: 24, max: 59, color: "#3b82f6" },
+  { label: "5 - 10 tahun", min: 60, max: 119, color: "#3b82f6" },
+  { label: "> 10 tahun", min: 120, max: Infinity, color: "#3b82f6" },
 ];
 
 const formatMonthsToLabel = (months: number): string => {
@@ -89,6 +139,19 @@ const formatMonthsToLabel = (months: number): string => {
   if (years === 0) return `${remainingMonths} bln`;
   if (remainingMonths === 0) return `${years} thn`;
   return `${years} thn ${remainingMonths} bln`;
+};
+
+// Tick Y eksplisit yang selaras antar chart: selalu `lineCount` garis di
+// posisi relatif sama (0%, 25%, 50%, 75%, 100% plot) dengan step angka cantik.
+const getAlignedTicks = (maxValue: number, lineCount = 5): number[] => {
+  const safeMax = Math.max(1, maxValue || 0);
+  const rawStep = safeMax / Math.max(1, lineCount - 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const step = ([1, 2, 2.5, 5, 10].find((c) => c * mag >= rawStep) ?? 10) * mag;
+  return Array.from(
+    { length: lineCount },
+    (_, i) => Math.round(i * step * 100) / 100,
+  );
 };
 
 const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
@@ -116,6 +179,12 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
     }));
   }, [inventoryRecords]);
 
+  // Tick Y selaras (5 garis sejajar) untuk kedua chart usia
+  const countTicks = useMemo(
+    () => getAlignedTicks(Math.max(0, ...ageDistribution.map((d) => d.count))),
+    [ageDistribution],
+  );
+
   const avgAgePerType = useMemo(() => {
     const map = new Map<string, { total: number; count: number }>();
     inventoryRecords.forEach((r) => {
@@ -138,6 +207,14 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
       .sort((a, b) => b.avgMonths - a.avgMonths);
   }, [inventoryRecords]);
 
+  const monthTicks = useMemo(
+    () =>
+      getAlignedTicks(
+        avgAgePerType.reduce((m, d) => Math.max(m, d.avgMonths), 0),
+      ),
+    [avgAgePerType],
+  );
+
   if (!stats) return null;
 
   return (
@@ -150,7 +227,7 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+          <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
             {stats.total}
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -158,7 +235,7 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
           </div>
         </div>
         <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+          <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
             {formatMonthsToLabel(stats.avgMonths)}
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -166,29 +243,30 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
           </div>
         </div>
         <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+          <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
             {formatMonthsToLabel(stats.maxMonths)}
           </div>
           <div
             className="text-xs text-slate-500 dark:text-slate-400 mt-1 truncate"
             title={stats.oldest?.namaMesin}
           >
-            Tertua{stats.oldest ? ` (${stats.oldest.helperJenis})` : ""}
+            Usia Mesin Tertua
+            {stats.oldest ? ` (${stats.oldest.helperJenis})` : ""}
           </div>
         </div>
         <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+          <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
             {stats.oldCount}
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Unit &gt; 5 Tahun
+            Usia Mesin &gt; 5 Tahun
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Age Distribution Bar Chart */}
-        <div>
+      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+        {/* Age Distribution Bar Chart (30%) */}
+        <div className="lg:col-span-3">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 text-center">
             Distribusi Usia Mesin
           </h3>
@@ -204,8 +282,13 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
                   stroke="#334155"
                   opacity={0.2}
                 />
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 11 }} width={40} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} height={64} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  width={40}
+                  ticks={countTicks}
+                  domain={[0, countTicks[countTicks.length - 1]]}
+                />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#1e293b",
@@ -215,7 +298,7 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
                   }}
                   formatter={(value: any) => [`${value} unit`, "Jumlah"]}
                 />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="count" radius={0}>
                   <LabelList
                     dataKey="count"
                     position="top"
@@ -235,33 +318,35 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
           </div>
         </div>
 
-        {/* Average Age per Machine Type */}
-        <div>
+        {/* Average Age per Machine Type (70%) */}
+        <div className="lg:col-span-7">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 text-center">
-            Usia Rata-rata per Jenis Mesin
+            Rata-Rata Usia per Jenis Mesin
           </h3>
-          <div className="h-64 w-full overflow-y-auto overflow-x-hidden pr-1">
-            <ResponsiveContainer
-              width="100%"
-              height={Math.max(264, avgAgePerType.length * 28)}
-            >
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={avgAgePerType}
-                layout="vertical"
-                margin={{ top: 5, right: 50, left: 10, bottom: 5 }}
+                margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  horizontal={false}
+                  vertical={false}
                   stroke="#334155"
                   opacity={0.2}
                 />
-                <XAxis type="number" tick={{ fontSize: 11 }} unit=" bln" />
-                <YAxis
+                <XAxis
                   dataKey="name"
-                  type="category"
-                  tick={{ fontSize: 10 }}
-                  width={80}
+                  tick={renderAngledWrappedXTick}
+                  interval={0}
+                  height={64}
+                />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  width={48}
+                  unit=" bln"
+                  ticks={monthTicks}
+                  domain={[0, monthTicks[monthTicks.length - 1]]}
                 />
                 <Tooltip
                   contentStyle={{
@@ -275,17 +360,7 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
                     "Rata-rata Usia",
                   ]}
                 />
-                <Bar dataKey="avgMonths" radius={[0, 4, 4, 0]}>
-                  <LabelList
-                    dataKey="avgMonths"
-                    position="right"
-                    style={{
-                      fontSize: "10px",
-                      fill: "#94a3b8",
-                      fontWeight: "500",
-                    }}
-                    formatter={(val: any) => formatMonthsToLabel(val)}
-                  />
+                <Bar dataKey="avgMonths" radius={0} maxBarSize={24}>
                   {avgAgePerType.map((entry, index) => {
                     const bracket = AGE_BRACKETS.find(
                       (b) =>
@@ -376,32 +451,54 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
     const total = base + pinjam + sewa + trial;
     return [
       {
-        name: "Milik Pabrik (Base)",
+        name: "Mesin Pringapus",
         value: base,
         percent: total > 0 ? base / total : 0,
-        color: "#10b981",
+        color: "#3b82f6",
       },
       {
-        name: "Pinjam Internal",
+        name: "Pinjam",
         value: pinjam,
         percent: total > 0 ? pinjam / total : 0,
-        color: "#ef4444",
+        color: "#db2777",
       },
       {
         name: "Sewa",
         value: sewa,
         percent: total > 0 ? sewa / total : 0,
-        color: "#f97316",
+        color: "#6d28d9",
       },
       {
         name: "Trial",
         value: trial,
         percent: total > 0 ? trial / total : 0,
-        color: "#a855f7",
+        color: "#f97316",
       },
     ]
       .filter((x) => x.value > 0)
       .sort((a, b) => a.value - b.value);
+  }, [availabilities]);
+
+  // Breakdown kepemilikan per jenis mesin untuk stacked bar chart
+  // (urut total terbanyak). Rumus per mesin sama dengan pie di atas.
+  const ownershipByMachine = useMemo(() => {
+    return availabilities
+      .map((a) => {
+        const base = a.baseCount !== undefined ? a.baseCount : a.jumlahMesin;
+        const pinjam = a.pinjamCount || 0;
+        const sewa = a.sewaCount || 0;
+        const trial = a.trialCount || 0;
+        return {
+          machine: a.jenisMesin,
+          base,
+          pinjam,
+          sewa,
+          trial,
+          total: base + pinjam + sewa + trial,
+        };
+      })
+      .filter((x) => x.total > 0)
+      .sort((a, b) => b.total - a.total);
   }, [availabilities]);
 
   // Overall machine requirements summary for capacity analysis
@@ -528,7 +625,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
               <PieChartIcon className="w-5 h-5 mr-2 text-indigo-500" />
-              Overview: Ketersediaan Mesin & Utilisasi Pabrik
+              Overview: Ketersediaan & Utilisasi Mesin
             </h2>
             {filters && (filters.startDate || filters.endDate) ? (
               <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 w-fit">
@@ -559,14 +656,14 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  {capacityStats.totalTypes} jenis mesin master
+                  {capacityStats.totalTypes} jenis mesin
                 </div>
               </div>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl p-3.5 flex flex-col justify-between">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
-                <span>Total Kebutuhan (Peak)</span>
+                <span>Total Kebutuhan Mesin Tertinggi</span>
                 <TrendingUp className="w-4 h-4 text-blue-500" />
               </div>
               <div className="mt-2">
@@ -577,7 +674,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Kebutuhan puncak seluruh line
+                  Kebutuhan mesin tertinggi pada periode tanggal yang dipilih
                 </div>
               </div>
             </div>
@@ -622,10 +719,10 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
             </div>
           </div>
 
-          {/* 2-Column Section: Status Kepemilikan & Top 5 Mesin Kritis */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 1-Row Section: Pie + Stacked Bar + Top 5 Mesin Kritis */}
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
             {/* Left: Ownership Pie Chart */}
-            <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+            <div className="lg:col-span-3 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Status Kepemilikan Mesin
@@ -634,23 +731,69 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                   {capacityStats.totalCapacity} unit total
                 </span>
               </div>
-              <div className="h-60 w-full">
+              <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                     <Pie
                       data={ownershipComposition}
                       cx="50%"
                       cy="50%"
-                      outerRadius={75}
+                      outerRadius={100}
                       dataKey="value"
-                      label={({ name, percent }) =>
-                        `${name} (${((percent || 0) * 100).toFixed(0)}%)`
-                      }
-                      labelLine={true}
-                      style={{ fontSize: "11px", fontWeight: "500" }}
+                      stroke="none"
+                      strokeWidth={0}
+                      label={(props: any) => {
+                        const { cx, cy, midAngle, outerRadius, name, percent } =
+                          props;
+                        // Geser vertikal per kategori supaya label slice kecil
+                        // yang berdekatan (Pinjam vs Trial) tidak tumpang tindih
+                        const LABEL_DY: Record<string, number> = {
+                          Pinjam: -24,
+                        };
+                        const RADIAN = Math.PI / 180;
+                        const cos = Math.cos(-midAngle * RADIAN);
+                        const sin = Math.sin(-midAngle * RADIAN);
+                        const outer = outerRadius || 0;
+                        const sx = cx + outer * cos;
+                        const sy = cy + outer * sin;
+                        const lx = cx + (outer + 8) * cos;
+                        const ly =
+                          cy + (outer + 8) * sin + (LABEL_DY[name] ?? 0);
+                        const anchor = lx > cx ? "start" : "end";
+                        const lineEndX = lx + (anchor === "start" ? -3 : 3);
+                        return (
+                          <g>
+                            <line
+                              x1={sx}
+                              y1={sy}
+                              x2={lineEndX}
+                              y2={ly}
+                              stroke="#94a3b8"
+                              strokeWidth={1}
+                            />
+                            <text
+                              x={lx}
+                              y={ly}
+                              fill="#94a3b8"
+                              textAnchor={anchor}
+                              dominantBaseline="central"
+                              fontSize={11}
+                              fontWeight={500}
+                            >
+                              {`${((percent || 0) * 100).toFixed(2)}%`}
+                            </text>
+                          </g>
+                        );
+                      }}
+                      labelLine={false}
                     >
                       {ownershipComposition.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.color}
+                          stroke="none"
+                          strokeWidth={0}
+                        />
                       ))}
                     </Pie>
                     <Tooltip
@@ -668,20 +811,142 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                   </PieChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* Legend Status Kepemilikan (nama kategori saja) */}
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 mt-3">
+                {ownershipComposition.map((entry) => (
+                  <div key={entry.name} className="flex items-center gap-1.5">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-[3px]"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 leading-tight whitespace-nowrap">
+                      {entry.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Right: Top 5 Mesin Paling Kritis / Shortage Terbesar */}
-            <div className="bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-2">
+            {/* Middle: Stacked Bar Kepemilikan per Jenis Mesin */}
+            <div className="lg:col-span-5 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  Top 5 Mesin Kritis / Utilisasi Tertinggi
+                  Komposisi Kepemilikan per Jenis Mesin
                 </h3>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {ownershipByMachine.length} jenis mesin
+                </span>
+              </div>
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={ownershipByMachine}
+                    margin={{ top: 15, right: 12, bottom: 8, left: -12 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="currentColor"
+                      className="text-slate-200 dark:text-slate-700"
+                    />
+                    <XAxis
+                      dataKey="machine"
+                      tick={{ fontSize: 9 }}
+                      angle={-90}
+                      textAnchor="end"
+                      interval={0}
+                      height={84}
+                      dy={2}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10 }}
+                      width={36}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#1e293b",
+                        border: "none",
+                        borderRadius: "8px",
+                        color: "#f8fafc",
+                      }}
+                      formatter={(value: any, name: any) => [
+                        `${value} unit`,
+                        name,
+                      ]}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      align="center"
+                      wrapperStyle={{ fontSize: 11, top: 0 }}
+                      formatter={(value: any) => (
+                        <span style={{ color: "#94a3b8" }}>{value}</span>
+                      )}
+                    />
+                    <Bar
+                      dataKey="base"
+                      name="Mesin Pringapus"
+                      stackId="ownership"
+                      fill="#3b82f6"
+                      radius={0}
+                      maxBarSize={18}
+                    />
+                    <Bar
+                      dataKey="pinjam"
+                      name="Pinjam"
+                      stackId="ownership"
+                      fill="#db2777"
+                      radius={0}
+                      maxBarSize={18}
+                    />
+                    <Bar
+                      dataKey="sewa"
+                      name="Sewa"
+                      stackId="ownership"
+                      fill="#6d28d9"
+                      radius={0}
+                      maxBarSize={18}
+                    />
+                    <Bar
+                      dataKey="trial"
+                      name="Trial"
+                      stackId="ownership"
+                      fill="#f97316"
+                      radius={0}
+                      maxBarSize={18}
+                      shape={renderVisibleShapeOnly}
+                    >
+                      <LabelList
+                        dataKey="total"
+                        position="top"
+                        offset={3}
+                        fontSize={9}
+                        fill="#94a3b8"
+                        formatter={(v: any) =>
+                          !v || Number(v) === 0
+                            ? ""
+                            : Math.round(Number(v)).toLocaleString("id-ID")
+                        }
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Right: Top 5 Mesin Kritis / Utilisasi Tertinggi (vertical list) */}
+            <div className="lg:col-span-2 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col">
+              <div className="mb-2">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  Top 5 Mesin dengan Utilisasi Tertinggi
+                </h3>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   Kebutuhan vs Ketersediaan
                 </span>
               </div>
 
-              <div className="space-y-3 my-auto">
+              <div className="space-y-2 my-auto">
                 {topCriticalMachines.map((m, idx) => {
                   const isShortage = m.gap < 0;
                   const utilPercent = Math.min(m.utilization, 150);
@@ -693,27 +958,28 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
 
                   return (
                     <div key={idx} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-800 dark:text-slate-200">
-                            {m.machine}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 text-[10px] font-bold rounded ${
-                              isShortage
-                                ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/50"
-                                : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
-                            }`}
-                          >
-                            {isShortage ? `Shortage ${m.gap}` : "Aman"}
-                          </span>
-                        </div>
-                        <div className="text-slate-500 dark:text-slate-400 text-[11px]">
-                          <span className="font-semibold text-slate-700 dark:text-slate-300">
-                            {m.required}
-                          </span>{" "}
-                          / {m.available} unit ({m.utilization}%)
-                        </div>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span
+                          className="font-bold text-slate-800 dark:text-slate-200 truncate"
+                          title={m.machine}
+                        >
+                          {m.machine}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] font-bold rounded whitespace-nowrap shrink-0 ${
+                            isShortage
+                              ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/50"
+                              : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
+                          }`}
+                        >
+                          {isShortage ? `Shortage ${m.gap}` : "Aman"}
+                        </span>
+                      </div>
+                      <div className="text-slate-500 dark:text-slate-400 text-[11px]">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          {m.required}
+                        </span>{" "}
+                        / {m.available} unit ({m.utilization}%)
                       </div>
 
                       {/* Progress bar */}
@@ -774,7 +1040,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
             {/* Left Panel: Machine Shortages Table */}
             <div className="flex flex-col gap-2">
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                1. Machines Frequently in Shortage
+                1. List Mesin yang Sering Mengalami Shortage
               </h3>
               {machineShortages.length === 0 ? (
                 <div className="text-center py-12 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-800/30">
@@ -835,7 +1101,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
             {/* Right Panel: Style Shortages Table */}
             <div className="flex flex-col gap-2">
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                2. Styles Causing{" "}
+                2. List Style yang menyebabkan{" "}
                 {selectedStyleMachineFilter !== "ALL"
                   ? `[${selectedStyleMachineFilter}]`
                   : ""}{" "}

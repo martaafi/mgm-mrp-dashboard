@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Sparkles,
+  Wrench,
 } from "lucide-react";
 import {
   ProductionPlan,
@@ -17,12 +18,17 @@ import {
   SnapshotRecord,
   RentalTrialRecord,
   InventoryRecord,
+  DowntimeRecord,
 } from "../../types/mrp";
 import { TabValue } from "../layout/Sidebar";
 import {
   calculateMachineRequirements,
   getRentalTrialAlerts,
 } from "../../utils/mrpCalculations";
+import {
+  filterDowntimeRecords,
+  getDowntimeKPIs,
+} from "../../utils/downtimeCalculations";
 
 interface PreviewDashboardProps {
   plans: ProductionPlan[];
@@ -31,6 +37,7 @@ interface PreviewDashboardProps {
   snapshots: SnapshotRecord[];
   rentalTrialRecords: RentalTrialRecord[];
   inventoryRecords: InventoryRecord[];
+  downtimeRecords: DowntimeRecord[];
   onNavigateTab: (tab: TabValue) => void;
   lastUpdated?: string | null;
 }
@@ -42,6 +49,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
   snapshots,
   rentalTrialRecords,
   inventoryRecords,
+  downtimeRecords,
   onNavigateTab,
   lastUpdated,
 }) => {
@@ -188,6 +196,19 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
     };
   }, [rentalTrialRecords]);
 
+  // 6. Downtime Mesin (Downtime Tab) — filter dasar saja (tanpa rentang tanggal),
+  // supaya konsisten dengan angka dashboard saat filter tanggal kosong.
+  const downtimeStats = useMemo(() => {
+    const base = filterDowntimeRecords(downtimeRecords, {
+      startDate: "",
+      endDate: "",
+      line: "",
+      machineType: "",
+      brand: "",
+    });
+    return getDowntimeKPIs(base);
+  }, [downtimeRecords]);
+
   return (
     <div className="flex flex-col gap-6 pb-8">
       {/* Executive Hero Banner */}
@@ -206,7 +227,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
               Dashboard Preview Hub
             </h1>
             <p className="mt-1.5 text-sm sm:text-base text-slate-300 max-w-2xl">
-              Rangkuman status kesiapan mesin jahit, lini produksi, perbandingan snapshot, utilisasi pabrik, dan peringatan sewa. Klik kartu untuk masuk ke detail masing-masing tab.
+              Rangkuman status kesiapan mesin jahit, lini produksi, perbandingan snapshot, utilisasi pabrik, downtime mesin, dan peringatan sewa. Klik kartu untuk masuk ke detail masing-masing tab.
             </p>
           </div>
 
@@ -600,6 +621,79 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-red-600 dark:text-red-400 group-hover:translate-x-1 transition-transform">
             <span>Buka Rental Alerts</span>
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </div>
+        </div>
+
+        {/* CARD 6: Downtime Mesin */}
+        <div
+          onClick={() => onNavigateTab("downtime")}
+          className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-orange-400 dark:hover:border-orange-600 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between cursor-pointer relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+
+          <div>
+            {/* Card Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border border-orange-100 dark:border-orange-800/50 group-hover:scale-105 transition-transform">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
+                    Downtime Mesin
+                  </h3>
+                  <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                    Tab Downtime Log
+                  </span>
+                </div>
+              </div>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                {downtimeStats.totalIncidents.toLocaleString("id-ID")} Kejadian
+              </span>
+            </div>
+
+            {/* Metrics Snippet */}
+            <div className="grid grid-cols-2 gap-2.5 mb-4">
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium">Total Downtime</span>
+                <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                  {Math.round(downtimeStats.totalDowntimeHours).toLocaleString("id-ID")} <span className="text-xs font-normal text-slate-400">jam</span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {Math.round(downtimeStats.totalDowntimeMinutes).toLocaleString("id-ID")} menit
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium">Rata-rata / Kejadian</span>
+                <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
+                  {Math.round(downtimeStats.avgDurationMinutes).toLocaleString("id-ID")} <span className="text-xs font-normal text-slate-400">menit</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Downtime Highlight */}
+            <div className="space-y-1.5 mb-4 text-xs">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                <span>Downtime Terlama:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {downtimeStats.topMachineType} (
+                  {Math.round(downtimeStats.topMachineTypeMinutes).toLocaleString("id-ID")} mnt)
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                <span>Line Tertinggi:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {downtimeStats.topLine} (
+                  {Math.round(downtimeStats.topLineMinutes).toLocaleString("id-ID")} mnt)
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Link */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-orange-600 dark:text-orange-400 group-hover:translate-x-1 transition-transform">
+            <span>Buka Downtime Mesin</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>
