@@ -308,6 +308,22 @@ export const getDowntimeAppsScriptUrl = (): string => {
   return localStorage.getItem(DOWNTIME_APPS_SCRIPT_KEY) || "";
 };
 
+// URL Apps Script Web App default bersama — dipakai otomatis oleh SEMUA user
+// yang belum menyimpan URL kustom sendiri. Ganti di sini jika deployment
+// Apps Script dibuat ulang (URL /exec berubah).
+export const DEFAULT_DOWNTIME_APPS_SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbydrmlPImYQp-JEkpCg_DUDelTSdQq6q9RouPRkMY6oCBpXYH8CsF494OCiqHQ-9KIc/exec";
+
+/** URL efektif: simpanan kustom (localStorage) menang, else default bersama. */
+export const getEffectiveDowntimeAppsScriptUrl = (): string => {
+  return getDowntimeAppsScriptUrl() || DEFAULT_DOWNTIME_APPS_SCRIPT_URL;
+};
+
+/** True jika URL efektif berasal dari default bersama (bukan simpanan kustom). */
+export const isUsingDefaultDowntimeAppsScriptUrl = (): boolean => {
+  return !getDowntimeAppsScriptUrl() && !!DEFAULT_DOWNTIME_APPS_SCRIPT_URL;
+};
+
 export const setDowntimeAppsScriptUrl = (url: string): void => {
   if (url) {
     localStorage.setItem(DOWNTIME_APPS_SCRIPT_KEY, url);
@@ -555,10 +571,11 @@ const fetchCurrentDowntimeData = async (
   retryOpts: DowntimeAppsScriptRetryOptions = {},
 ): Promise<DowntimeFetchResult> => {
   // Mode 1: Try Google Apps Script Web App URL if configured (anti-filter)
-  // Bounded auto-retry: percobaan ulang otomatis maks maxAttempts kali,
-  // lalu menyerah dan fallback ke GViz. Fail-fast (tanpa retry) untuk
+  // URL efektif = simpanan kustom user, else default bersama. Bounded
+  // auto-retry: percobaan ulang otomatis maks maxAttempts kali, lalu
+  // menyerah dan fallback ke GViz. Fail-fast (tanpa retry) untuk
   // error konfigurasi deployment (401/403/404).
-  const appsScriptUrl = getDowntimeAppsScriptUrl();
+  const appsScriptUrl = getEffectiveDowntimeAppsScriptUrl();
   if (appsScriptUrl) {
     console.log("[Downtime] Apps Script URL configured, attempting fetch...", appsScriptUrl);
     const outcome = await fetchAppsScriptJsonWithRetry(appsScriptUrl, retryOpts);

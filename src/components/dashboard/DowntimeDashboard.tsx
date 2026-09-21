@@ -53,6 +53,9 @@ import {
   APPS_SCRIPT_CODE_TEMPLATE,
   getDowntimeAppsScriptUrl,
   setDowntimeAppsScriptUrl,
+  getEffectiveDowntimeAppsScriptUrl,
+  isUsingDefaultDowntimeAppsScriptUrl,
+  DEFAULT_DOWNTIME_APPS_SCRIPT_URL,
 } from "../../utils/googleSheetsAPI";
 
 // @ts-ignore
@@ -109,7 +112,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [showAppsScriptModal, setShowAppsScriptModal] = useState(false);
   const [appsScriptUrl, setAppsScriptUrl] = useState(() =>
-    getDowntimeAppsScriptUrl(),
+    getEffectiveDowntimeAppsScriptUrl(),
   );
   const [codeCopied, setCodeCopied] = useState(false);
   const rowsPerPage = 15;
@@ -267,14 +270,32 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
     setTimeout(() => setCodeCopied(false), 2000);
   }, []);
 
+  const handleOpenAppsScriptModal = useCallback(() => {
+    // Prefill dengan URL efektif (kustom user, else default bersama)
+    setAppsScriptUrl(getEffectiveDowntimeAppsScriptUrl());
+    setShowAppsScriptModal(true);
+  }, []);
+
   const handleSaveAppsScriptUrl = useCallback(() => {
-    setDowntimeAppsScriptUrl(appsScriptUrl);
+    const trimmed = appsScriptUrl.trim();
+    // Sama dengan default bersama = tidak perlu simpanan kustom
+    setDowntimeAppsScriptUrl(
+      trimmed && trimmed !== DEFAULT_DOWNTIME_APPS_SCRIPT_URL ? trimmed : "",
+    );
     setShowAppsScriptModal(false);
-    // Trigger a full data re-fetch so downtime data is loaded via the new Apps Script URL
+    // Trigger a data re-fetch so downtime data is loaded via the effective Apps Script URL
     if (onRefreshData) {
       onRefreshData();
     }
   }, [appsScriptUrl, onRefreshData]);
+
+  const handleClearCustomAppsScriptUrl = useCallback(() => {
+    // Hapus simpanan kustom → kembali ke default bersama
+    setDowntimeAppsScriptUrl("");
+    setAppsScriptUrl(DEFAULT_DOWNTIME_APPS_SCRIPT_URL);
+    setShowAppsScriptModal(false);
+    if (onRefreshData) onRefreshData();
+  }, [onRefreshData]);
 
   const handleExportExcel = useCallback(() => {
     const exportData = tableData.map((r) => ({
@@ -304,7 +325,9 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
     );
   };
 
-  const isAppsScriptConfigured = !!getDowntimeAppsScriptUrl();
+  const isAppsScriptConfigured = !!getEffectiveDowntimeAppsScriptUrl();
+  const isUsingDefaultUrl = isUsingDefaultDowntimeAppsScriptUrl();
+  const hasCustomUrl = !!getDowntimeAppsScriptUrl();
   const isDataFromAppsScript = downtimeSource === "apps_script";
 
   // --- Custom Recharts Tooltip ---
@@ -412,7 +435,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             <ExternalLink className="w-3 h-3" /> Sheet Jan-Jun (Line G)
           </a>
           <button
-            onClick={() => setShowAppsScriptModal(true)}
+            onClick={handleOpenAppsScriptModal}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
           >
             <Settings2 className="w-3 h-3" /> Apps Script Setup
@@ -1198,10 +1221,15 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                     placeholder="https://script.google.com/macros/s/.../exec"
                     className="w-full h-10 px-3 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 transition-colors"
                   />
-                  {isAppsScriptConfigured && (
+                  {isUsingDefaultUrl ? (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                      Menggunakan URL default bersama — berlaku otomatis untuk
+                      semua user tanpa perlu setup.
+                    </p>
+                  ) : (
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
-                      ✓ URL sudah tersimpan. Data akan diambil via Apps Script
-                      pada refresh berikutnya.
+                      ✓ URL kustom tersimpan di browser ini. Data akan diambil
+                      via Apps Script pada refresh berikutnya.
                     </p>
                   )}
                 </div>
@@ -1214,14 +1242,10 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                   >
                     Simpan URL
                   </button>
-                  {isAppsScriptConfigured && (
+                  {hasCustomUrl && (
                     <button
-                      onClick={() => {
-                        setAppsScriptUrl("");
-                        setDowntimeAppsScriptUrl("");
-                        setShowAppsScriptModal(false);
-                        if (onRefreshData) onRefreshData();
-                      }}
+                      onClick={handleClearCustomAppsScriptUrl}
+                      title="Hapus URL kustom dan kembali ke default bersama"
                       className="h-10 px-4 text-sm font-medium rounded-xl bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 text-red-700 dark:text-red-400 transition-colors"
                     >
                       Hapus URL
