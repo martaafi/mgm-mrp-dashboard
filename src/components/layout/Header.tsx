@@ -6,6 +6,8 @@ import {
   Database,
   ExternalLink,
   RefreshCw,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { GOOGLE_SHEET_URL } from "../../utils/googleSheetsAPI";
 import { Moon, Sun } from "lucide-react";
@@ -19,6 +21,8 @@ interface HeaderProps {
   isRefreshing: boolean;
   isDarkMode: boolean;
   toggleDarkMode: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,14 +34,34 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   isDarkMode,
   toggleDarkMode,
+  onToggleSidebar,
+  isSidebarCollapsed = false,
 }) => {
   return (
     <header className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          {/* Logo and Title */}
+          {/* Logo, Sidebar Toggle, and Title */}
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-sm font-bold text-white text-lg">
+            {onToggleSidebar && (
+              <button
+                onClick={onToggleSidebar}
+                className="p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title={
+                  isSidebarCollapsed
+                    ? "Perlebar Menu Sidebar"
+                    : "Perkecil Menu Sidebar (Mini Rail)"
+                }
+                aria-label="Toggle sidebar"
+              >
+                {isSidebarCollapsed ? (
+                  <PanelLeftOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                ) : (
+                  <PanelLeftClose className="w-5 h-5" />
+                )}
+              </button>
+            )}
+            <div className="w-12 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-sm font-bold text-white text-lg shrink-0">
               MRP
             </div>
             <div>

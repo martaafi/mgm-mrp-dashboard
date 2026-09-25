@@ -335,6 +335,31 @@ export default function App() {
     [rentalTrialRecords]
   );
 
+  // Sidebar Collapsed State (persisted in localStorage)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("mrp_sidebar_collapsed");
+      return saved !== null ? JSON.parse(saved) : false;
+    } catch {
+      return false;
+    }
+  });
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  const handleToggleSidebar = () => {
+    if (window.innerWidth < 1024) {
+      setIsMobileSidebarOpen((prev) => !prev);
+    } else {
+      setIsSidebarCollapsed((prev) => {
+        const next = !prev;
+        try {
+          localStorage.setItem("mrp_sidebar_collapsed", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+  };
+
   // Reset to default benchmark data handler
   const handleResetData = () => {
     window.location.reload();
@@ -357,7 +382,7 @@ export default function App() {
         </div>
 
         {/* Main Content Skeleton */}
-        <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-4 animate-pulse">
+        <div className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-4 animate-pulse">
           {/* Tabs Skeleton */}
           <div className="border-b border-slate-200 dark:border-slate-800 pb-2">
             <div className="flex space-x-1 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg">
@@ -449,14 +474,24 @@ export default function App() {
         isRefreshing={isRefreshing}
         isDarkMode={isDarkMode}
         toggleDarkMode={toggleDarkMode}
+        onToggleSidebar={handleToggleSidebar}
+        isSidebarCollapsed={isSidebarCollapsed}
       />
 
       {/* Main Container */}
       <div className="flex-1 w-full flex overflow-hidden">
-        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} alertCount={rentalTrialAlertCount} />
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          alertCount={rentalTrialAlertCount}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        />
 
         <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950">
-          <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4 min-h-full">
+          <main className="w-full px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4 min-h-full">
           {/* Filter Bar for Summary Tab */}
           {activeTab === "summary" && (
             <FilterBar
@@ -564,7 +599,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-5 mt-12 shadow-sm transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+        <div className="w-full px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <div>
             <span className="font-bold text-slate-800 dark:text-slate-200">
               Garment Sewing Machine Requirement Planning (MRP) Dashboard
