@@ -239,8 +239,9 @@ export const calculateMachineRequirements = (
 
   allMachineTypes.forEach((machineType) => {
     const available = maxAvailabilityMap[machineType.toLowerCase()] || 0;
-    const required = requiredMap[machineType] || 0;
-    const gap = available - required;
+    const rawRequired = requiredMap[machineType] || 0;
+    const required = Math.round(rawRequired * 100) / 100;
+    const gap = Math.round((available - required) * 100) / 100;
 
     let status: GapStatus = 'Balanced';
     if (gap < 0) {
@@ -323,8 +324,8 @@ export const buildLineMachineMatrix = (
           otherStyleReqs.forEach(req => {
             if (req.kebutuhanAccessories && req.kebutuhanAccessories > 0) {
               const type = req.jenisMesin.trim();
-              machines[type] = (machines[type] || 0) + req.kebutuhanAccessories;
-              totalMachines += req.kebutuhanAccessories;
+              machines[type] = Math.round(((machines[type] || 0) + req.kebutuhanAccessories) * 100) / 100;
+              totalMachines = Math.round((totalMachines + req.kebutuhanAccessories) * 100) / 100;
             }
           });
         });
@@ -333,8 +334,8 @@ export const buildLineMachineMatrix = (
         styleReqs.forEach((req) => {
           if (req.kebutuhanTotal > 0) {
             const type = req.jenisMesin.trim();
-            machines[type] = (machines[type] || 0) + req.kebutuhanTotal;
-            totalMachines += req.kebutuhanTotal;
+            machines[type] = Math.round(((machines[type] || 0) + req.kebutuhanTotal) * 100) / 100;
+            totalMachines = Math.round((totalMachines + req.kebutuhanTotal) * 100) / 100;
           }
         });
       }

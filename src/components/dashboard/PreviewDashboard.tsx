@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Sparkles,
   Wrench,
+  CalendarDays,
 } from "lucide-react";
 import {
   ProductionPlan,
@@ -24,11 +25,83 @@ import { TabValue } from "../layout/Sidebar";
 import {
   calculateMachineRequirements,
   getRentalTrialAlerts,
+  excludeNoPlanningOnlyLines,
+  isSunday,
+  getAdjustedAvailabilityForDateRange,
 } from "../../utils/mrpCalculations";
 import {
   filterDowntimeRecords,
   getDowntimeKPIs,
 } from "../../utils/downtimeCalculations";
+
+/* ------------------------------------------------------------------ */
+/*  Helper: Current ISO-week boundaries (Senin – Minggu)              */
+/* ------------------------------------------------------------------ */
+const getCurrentWeekInfo = () => {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun … 6=Sat
+
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - ((dow + 6) % 7));
+  const saturday = new Date(monday);
+  saturday.setDate(monday.getDate() + 5);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+
+  // ISO week number
+  const tmp = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const isoDay = (tmp.getDay() + 6) % 7;
+  tmp.setDate(tmp.getDate() - isoDay + 3);
+  const isoYear = tmp.getFullYear();
+  const firstThu = new Date(isoYear, 0, 4);
+  const off = (firstThu.getDay() + 6) % 7;
+  firstThu.setDate(firstThu.getDate() - off + 3);
+  const weekNum =
+    1 + Math.round((tmp.getTime() - firstThu.getTime()) / (7 * 86400000));
+
+  return {
+    startDate: fmt(monday),
+    endDate: fmt(sunday), // inclusive — Sundays excluded by isSunday()
+    todayStr: fmt(today),
+    weekNum,
+    weekLabel: `W${weekNum}`,
+    weekYear: `W${weekNum}-${isoYear}`,
+    year: isoYear,
+    rangeText: `${monday.getDate()}/${monday.getMonth() + 1} – ${saturday.getDate()}/${saturday.getMonth() + 1}`,
+  };
+};
+
+/** Human-readable short date, e.g. "Kamis, 25/9" */
+const formatDateShort = (dateStr: string) => {
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    const dayNames = [
+      "Minggu",
+      "Senin",
+      "Selasa",
+      "Rabu",
+      "Kamis",
+      "Jumat",
+      "Sabtu",
+    ];
+    const d = new Date(
+      parseInt(parts[0]),
+      parseInt(parts[1]) - 1,
+      parseInt(parts[2]),
+    );
+    return `${dayNames[d.getDay()]}, ${parseInt(parts[2])}/${parseInt(parts[1])}`;
+  }
+  return dateStr;
+};
+
+/* ------------------------------------------------------------------ */
 
 interface PreviewDashboardProps {
   plans: ProductionPlan[];
@@ -53,10 +126,46 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
   onNavigateTab,
   lastUpdated,
 }) => {
-  // 1. Overall Machine Requirements (Summary & Capacity)
+  /* ---- Current Week Context ---- */
+  const currentWeek = useMemo(() => getCurrentWeekInfo(), []);
+
+  /* Plans filtered to current week (Mon–Sat, Sundays excluded) */
+  const currentWeekPlans = useMemo(
+    () =>
+      plans.filter((p) => {
+        if (isSunday(p.date)) return false;
+        return p.date >= currentWeek.startDate && p.date <= currentWeek.endDate;
+      }),
+    [plans, currentWeek],
+  );
+
+  /* Exclude lines whose ALL plans = "NO PLANNING" in current week */
+  const cleanPlans = useMemo(
+    () => excludeNoPlanningOnlyLines(currentWeekPlans),
+    [currentWeekPlans],
+  );
+
+  // Adjusted availability: accounts for expired sewa/trial within the week
+  const adjustedAvailabilities = useMemo(
+    () =>
+      getAdjustedAvailabilityForDateRange(
+        currentWeek.startDate,
+        currentWeek.endDate,
+        availabilities,
+        rentalTrialRecords,
+      ),
+    [currentWeek, availabilities, rentalTrialRecords],
+  );
+
+  // 1. Machine Requirements (current week only, adjusted availability)
   const machineRequirements = useMemo(
-    () => calculateMachineRequirements(plans, requirements, availabilities),
-    [plans, requirements, availabilities]
+    () =>
+      calculateMachineRequirements(
+        cleanPlans,
+        requirements,
+        adjustedAvailabilities,
+      ),
+    [cleanPlans, requirements, adjustedAvailabilities],
   );
 
   const capacityStats = useMemo(() => {
@@ -65,11 +174,9 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
     let shortageCount = 0;
     let availableCount = 0;
 
-    availabilities.forEach((a) => {
-      totalAvail += a.jumlahMesin;
-    });
-
+    // Compute totals from machineRequirements (consistent with Summary/KPICards)
     machineRequirements.forEach((r) => {
+      totalAvail += r.available;
       totalReq += r.required;
       if (r.status === "Shortage") {
         shortageCount++;
@@ -77,6 +184,10 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
         availableCount++;
       }
     });
+
+    // Round to 2 decimal places to avoid floating-point artifacts
+    totalAvail = Math.round(totalAvail * 100) / 100;
+    totalReq = Math.round(totalReq * 100) / 100;
 
     const avgUtil =
       totalAvail > 0 ? ((totalReq / totalAvail) * 100).toFixed(1) : "0";
@@ -93,62 +204,103 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
       shortageCount,
       availableCount,
       topShortages,
-      totalTypes: availabilities.length,
+      totalTypes: adjustedAvailabilities.length,
     };
-  }, [availabilities, machineRequirements]);
+  }, [adjustedAvailabilities, machineRequirements]);
 
-  // 2. Production Details (Detail Tab)
+  // 2. Detail Stats (current week, NO PLANNING excluded)
   const detailStats = useMemo(() => {
-    const uniqueLines = new Set(plans.map((p) => p.line));
-    const uniqueStyles = new Set(plans.map((p) => p.style));
+    // Filter keluar plan yang memiliki style atau displayStyle "NO PLANNING"
+    const activePlans = cleanPlans.filter(
+      (p) =>
+        (p.style || "").trim().toUpperCase() !== "NO PLANNING" &&
+        (p.displayStyle || "").trim().toUpperCase() !== "NO PLANNING",
+    );
 
-    // Get latest active lines sample
-    const lineMap = new Map<string, { line: string; style: string; date: string }>();
-    plans.forEach((p) => {
-      if (!lineMap.has(p.line)) {
-        lineMap.set(p.line, { line: p.line, style: p.style, date: p.date });
+    // Lines aktif = line unik yang punya planning aktif
+    const uniqueLines = new Set(activePlans.map((p) => p.line));
+
+    // Variasi style unik
+    const uniqueStyles = new Set(activePlans.map((p) => p.style));
+
+    // Total planning efektif = slot unik (tanggal × line) yang memiliki jadwal aktif
+    const effectiveKeys = new Set(
+      activePlans.map((p) => `${p.date}|${p.line}`),
+    );
+
+    // Sample: alokasi HARI INI dari plan aktif (fallback ke tanggal terakhir jika kosong)
+    let sampleDate = currentWeek.todayStr;
+    let datePlans = activePlans.filter((p) => p.date === sampleDate);
+    if (datePlans.length === 0) {
+      const sorted = [...new Set(activePlans.map((p) => p.date))].sort();
+      if (sorted.length > 0) {
+        sampleDate = sorted[sorted.length - 1];
+        datePlans = activePlans.filter((p) => p.date === sampleDate);
       }
-    });
+    }
 
-    const sampleLines = Array.from(lineMap.values()).slice(0, 3);
+    // Style terakhir per line menang (konsisten dengan logika kalkulasi mesin)
+    const lineMap = new Map<
+      string,
+      { line: string; style: string; date: string }
+    >();
+    datePlans.forEach((p) =>
+      lineMap.set(p.line, { line: p.line, style: p.style, date: p.date }),
+    );
+    const sampleLines = Array.from(lineMap.values())
+      .sort((a, b) =>
+        a.line.localeCompare(b.line, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
+      )
+      .slice(0, 3);
 
     return {
       totalLines: uniqueLines.size,
       totalStyles: uniqueStyles.size,
-      totalPlans: plans.length,
+      totalPlans: effectiveKeys.size,
       sampleLines,
+      sampleDate,
     };
-  }, [plans]);
+  }, [cleanPlans, currentWeek.todayStr]);
 
-  // 3. Snapshot History (History Tab)
+  // 3. Snapshot History — ringkasan per LINE (bukan per hari)
   const historyStats = useMemo(() => {
     if (snapshots.length === 0) {
       return {
         hasData: false,
         latestVersion: "-",
         lastVersion: "-",
-        styleChanges: 0,
-        machineChanges: 0,
+        styleChangedLines: 0,
+        machineChangedLines: 0,
         totalRows: 0,
       };
     }
 
     const latest = snapshots[0];
-    const styleChanges = snapshots.filter((s) => s.isPlanningStyleChanged).length;
-    const machineChanges = snapshots.filter((s) => s.isMachineStyleChanged).length;
+
+    // Hitung LINE UNIK yang berubah, bukan baris per hari.
+    // Misal G01 berubah di 6 hari → tetap dihitung 1 line berubah.
+    const linesWithStyleChange = new Set(
+      snapshots.filter((s) => s.isPlanningStyleChanged).map((s) => s.line),
+    );
+    const linesWithMachineChange = new Set(
+      snapshots.filter((s) => s.isMachineStyleChanged).map((s) => s.line),
+    );
 
     return {
       hasData: true,
       latestVersion: latest.updateVersion || "Update",
       lastVersion: latest.lastVersion || "Previous",
       snapshotDate: latest.updateSnapshotDate || latest.planningDate,
-      styleChanges,
-      machineChanges,
+      styleChangedLines: linesWithStyleChange.size,
+      machineChangedLines: linesWithMachineChange.size,
       totalRows: snapshots.length,
     };
   }, [snapshots]);
 
-  // 4. Fleet Age & Analytics (Analytics Tab)
+  // 4. Fleet Age & Analytics (usia mesin = data inventory statis; utilisasi = current week)
   const analyticsStats = useMemo(() => {
     const totalFleet = inventoryRecords.length;
     let avgMonths = 0;
@@ -161,53 +313,56 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
     }
 
     const avgYears = Math.floor(avgMonths / 12);
-    const remainingMonths = avgMonths % 12;
+    const rem = avgMonths % 12;
     const avgAgeText =
       avgYears === 0
-        ? `${remainingMonths} bln`
-        : remainingMonths === 0
-        ? `${avgYears} thn`
-        : `${avgYears} thn ${remainingMonths} bln`;
+        ? `${rem} bln`
+        : rem === 0
+          ? `${avgYears} thn`
+          : `${avgYears} thn ${rem} bln`;
 
-    return {
-      totalFleet,
-      avgAgeText,
-      over5Years,
-    };
+    return { totalFleet, avgAgeText, over5Years };
   }, [inventoryRecords]);
 
-  // 5. Rental & Trial Alerts (Alerts Tab)
+  // 5. Rental & Trial Alerts — hanya jatuh tempo di week berjalan
   const alertStats = useMemo(() => {
-    const alerts = getRentalTrialAlerts(rentalTrialRecords, 7);
-    const critical = alerts.filter((a) => a.severity === "critical");
-    const warning = alerts.filter((a) => a.severity === "warning");
+    // Window lebar supaya tangkap semua yg jatuh tempo minggu ini
+    const allAlerts = getRentalTrialAlerts(rentalTrialRecords, 30);
 
-    const topUrgent = alerts
+    // Filter: tglSelesai jatuh di dalam minggu berjalan
+    const weekAlerts = allAlerts.filter((a) => {
+      const end = a.record.tglSelesai;
+      return end >= currentWeek.startDate && end <= currentWeek.endDate;
+    });
+
+    const critical = weekAlerts.filter((a) => a.severity === "critical");
+    const warning = weekAlerts.filter((a) => a.severity === "warning");
+
+    const topUrgent = weekAlerts
       .filter((a) => a.daysRemaining >= 0)
       .sort((a, b) => a.daysRemaining - b.daysRemaining)
       .slice(0, 3);
 
     return {
-      totalAlerts: alerts.length,
+      totalAlerts: weekAlerts.length,
       criticalCount: critical.length,
       warningCount: warning.length,
       totalRentals: rentalTrialRecords.length,
       topUrgent,
     };
-  }, [rentalTrialRecords]);
+  }, [rentalTrialRecords, currentWeek]);
 
-  // 6. Downtime Mesin (Downtime Tab) — filter dasar saja (tanpa rentang tanggal),
-  // supaya konsisten dengan angka dashboard saat filter tanggal kosong.
+  // 6. Downtime — current week only
   const downtimeStats = useMemo(() => {
     const base = filterDowntimeRecords(downtimeRecords, {
-      startDate: "",
-      endDate: "",
+      startDate: currentWeek.startDate,
+      endDate: currentWeek.endDate,
       line: "",
       machineType: "",
       brand: "",
     });
     return getDowntimeKPIs(base);
-  }, [downtimeRecords]);
+  }, [downtimeRecords, currentWeek]);
 
   return (
     <div className="flex flex-col gap-6 pb-8">
@@ -221,21 +376,36 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
           <div>
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-semibold mb-3">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Executive Overview & Quick Navigation</span>
+              <span>Executive Overview &amp; Quick Navigation</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
               Dashboard Preview Hub
             </h1>
             <p className="mt-1.5 text-sm sm:text-base text-slate-300 max-w-2xl">
-              Rangkuman status kesiapan mesin jahit, lini produksi, perbandingan snapshot, utilisasi pabrik, downtime mesin, dan peringatan sewa. Klik kartu untuk masuk ke detail masing-masing tab.
+              Rangkuman status kesiapan mesin jahit, lini produksi, perbandingan
+              snapshot, utilisasi pabrik, downtime mesin, dan peringatan sewa
+              untuk <strong>minggu berjalan</strong>. Klik kartu untuk masuk ke
+              detail masing-masing tab.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+            {/* Current Week Badge */}
+            <div className="px-3.5 py-2 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-xs text-indigo-200 flex items-center space-x-2">
+              <CalendarDays className="w-4 h-4 text-indigo-400" />
+              <span>
+                Periode:{" "}
+                <strong>
+                  {currentWeek.weekLabel} ({currentWeek.rangeText})
+                </strong>
+              </span>
+            </div>
             {lastUpdated && (
               <div className="px-3.5 py-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs text-slate-300 flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-slate-400" />
-                <span>Update: <strong>{lastUpdated}</strong></span>
+                <span>
+                  Update: <strong>{lastUpdated}</strong>
+                </span>
               </div>
             )}
           </div>
@@ -260,10 +430,10 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    Summary Kebutuhan
+                    Summary
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab Summary (Tabel Utama)
+                    Kebutuhan mesin pada {currentWeek.weekLabel}
                   </span>
                 </div>
               </div>
@@ -275,15 +445,25 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Metrics Snippet */}
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Tersedia</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Jumlah Mesin Tersedia
+                </span>
                 <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                  {capacityStats.totalCapacity} <span className="text-xs font-normal text-slate-400">unit</span>
+                  {capacityStats.totalCapacity}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    unit
+                  </span>
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Kebutuhan (Peak)</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Total Kebutuhan Mesin
+                </span>
                 <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                  {capacityStats.totalRequired} <span className="text-xs font-normal text-slate-400">unit</span>
+                  {capacityStats.totalRequired}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    unit
+                  </span>
                 </div>
               </div>
             </div>
@@ -291,7 +471,9 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Status Highlight */}
             <div className="space-y-1.5 mb-4">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Status Kesiapan:</span>
+                <span className="text-slate-500 dark:text-slate-400 font-medium">
+                  Status Shortage:
+                </span>
                 <span
                   className={`font-bold flex items-center ${
                     capacityStats.shortageCount > 0
@@ -351,10 +533,12 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                    Detail Matriks Line
+                    Kebutuhan Mesin per Line
                   </h3>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab Detail (Line x Mesin)
+                  <span className="text-xs text-slate-400 dark:text-slate-500 font-medium block leading-tight">
+                    Detail kebutuhan mesin per line
+                    <br />
+                    pada {currentWeek.weekLabel}
                   </span>
                 </div>
               </div>
@@ -366,35 +550,62 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Metrics Snippet */}
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Total Jadwal</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Total Planning
+                </span>
                 <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                  {detailStats.totalPlans} <span className="text-xs font-normal text-slate-400">rencana</span>
+                  {detailStats.totalPlans}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    plan
+                  </span>
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Variasi Style</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Total Planning Style
+                </span>
                 <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                  {detailStats.totalStyles} <span className="text-xs font-normal text-slate-400">style</span>
+                  {detailStats.totalStyles}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    style
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Sample Running Lines */}
+            {/* Sample Running Lines — hari ini atau terakhir tersedia */}
             <div className="space-y-1.5 mb-4">
-              <span className="text-xs text-slate-400 font-medium block">Contoh Alokasi Line:</span>
-              <div className="space-y-1">
-                {detailStats.sampleLines.map((l) => (
-                  <div
-                    key={l.line}
-                    className="flex items-center justify-between text-xs p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/40"
-                  >
-                    <span className="font-bold text-slate-700 dark:text-slate-300">{l.line}</span>
-                    <span className="text-slate-500 dark:text-slate-400 text-[11px] truncate max-w-[140px]" title={l.style}>
-                      {l.style}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <span className="text-xs text-slate-400 font-medium block">
+                {detailStats.sampleDate === currentWeek.todayStr
+                  ? `Planning Hari Ini (${formatDateShort(detailStats.sampleDate)}):`
+                  : detailStats.sampleLines.length > 0
+                    ? `Alokasi Terbaru (${formatDateShort(detailStats.sampleDate)}):`
+                    : "Alokasi Line:"}
+              </span>
+              {detailStats.sampleLines.length > 0 ? (
+                <div className="space-y-1">
+                  {detailStats.sampleLines.map((l) => (
+                    <div
+                      key={l.line}
+                      className="flex items-center justify-between text-xs p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/40"
+                    >
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {l.line}
+                      </span>
+                      <span
+                        className="text-slate-500 dark:text-slate-400 text-[11px] truncate max-w-[140px]"
+                        title={l.style}
+                      >
+                        {l.style}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 italic">
+                  Tidak ada jadwal aktif untuk minggu ini.
+                </div>
+              )}
             </div>
           </div>
 
@@ -421,10 +632,12 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                    Analytics & Usia
+                    Analytics
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab Analytics
+                    Dashboard ringkasan ketersediaan,
+                    <br></br>status kepemilikan, utilitas, distribusi
+                    <br></br>usia, serta analisis mesin shortage
                   </span>
                 </div>
               </div>
@@ -436,15 +649,22 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Metrics Snippet */}
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Usia Rata-rata</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Rata-rata usia mesin
+                </span>
                 <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
                   {analyticsStats.avgAgeText}
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Mesin &gt; 5 Tahun</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Mesin dengan usia &gt; 5 Tahun
+                </span>
                 <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                  {analyticsStats.over5Years} <span className="text-xs font-normal text-slate-400">unit</span>
+                  {analyticsStats.over5Years}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    unit
+                  </span>
                 </div>
               </div>
             </div>
@@ -452,11 +672,16 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Overview Highlights */}
             <div className="space-y-1.5 mb-4 text-xs">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span>Total Armada Fisik:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{analyticsStats.totalFleet} unit</span>
+                <span>Total Ketersediaan Mesin ({currentWeek.weekLabel}):</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {capacityStats.totalCapacity} unit
+                </span>
               </div>
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span>Top Shortage:</span>
+                <span>
+                  Mesin dengan jumlah shortage terbanyak pada (
+                  {currentWeek.weekLabel}):
+                </span>
                 <span className="font-semibold text-red-500">
                   {capacityStats.topShortages[0]
                     ? `${capacityStats.topShortages[0].machine} (${capacityStats.topShortages[0].gap})`
@@ -468,7 +693,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
 
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-1 transition-transform">
-            <span>Buka Analytics & Chart</span>
+            <span>Buka Analytics &amp; Chart</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>
@@ -504,15 +729,25 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Metrics Snippet */}
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Perubahan Style</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Line Ubah Planning
+                </span>
                 <div className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
-                  {historyStats.styleChanges} <span className="text-xs font-normal text-slate-400">line</span>
+                  {historyStats.styleChangedLines}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    line
+                  </span>
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Perubahan Mesin</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Line Ubah Style Mesin
+                </span>
                 <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-                  {historyStats.machineChanges} <span className="text-xs font-normal text-slate-400">line</span>
+                  {historyStats.machineChangedLines}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    line
+                  </span>
                 </div>
               </div>
             </div>
@@ -527,7 +762,9 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
               </div>
               <div className="flex items-center justify-between">
                 <span>Total Snapshot Terdata:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{historyStats.totalRows} baris</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {historyStats.totalRows} baris
+                </span>
               </div>
             </div>
           </div>
@@ -555,10 +792,10 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
-                    Rental & Trial Alerts
+                    Rental &amp; Trial Alerts
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab Rental Alerts
+                    Tab Rental · {currentWeek.weekLabel}
                   </span>
                 </div>
               </div>
@@ -576,22 +813,32 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Metrics Snippet */}
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-red-50/60 dark:bg-red-900/20 border border-red-100 dark:border-red-800/40">
-                <span className="text-[11px] text-red-500 font-medium">Kritis (≤ 3 Hari)</span>
+                <span className="text-[11px] text-red-500 font-medium">
+                  Kritis (≤ 3 Hari)
+                </span>
                 <div className="text-lg font-bold text-red-600 dark:text-red-400">
-                  {alertStats.criticalCount} <span className="text-xs font-normal text-red-400">unit</span>
+                  {alertStats.criticalCount}{" "}
+                  <span className="text-xs font-normal text-red-400">unit</span>
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-amber-50/60 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40">
-                <span className="text-[11px] text-amber-500 font-medium">Perhatian (4-7 Hari)</span>
+                <span className="text-[11px] text-amber-500 font-medium">
+                  Perhatian (4-7 Hari)
+                </span>
                 <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
-                  {alertStats.warningCount} <span className="text-xs font-normal text-amber-400">unit</span>
+                  {alertStats.warningCount}{" "}
+                  <span className="text-xs font-normal text-amber-400">
+                    unit
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Urgent Expiring List */}
             <div className="space-y-1.5 mb-4">
-              <span className="text-xs text-slate-400 font-medium block">Masa Sewa Terdekat:</span>
+              <span className="text-xs text-slate-400 font-medium block">
+                Jatuh Tempo Minggu Ini:
+              </span>
               {alertStats.topUrgent.length > 0 ? (
                 <div className="space-y-1">
                   {alertStats.topUrgent.map((a, idx) => (
@@ -604,16 +851,24 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                       </span>
                       <span
                         className={`text-[11px] font-bold ${
-                          a.daysRemaining <= 3 ? "text-red-500" : "text-amber-500"
+                          a.daysRemaining <= 3
+                            ? "text-red-500"
+                            : "text-amber-500"
                         }`}
                       >
-                        Sisa {a.daysRemaining} hari ({a.record.remark.toLowerCase().includes("trial") ? "Trial" : "Sewa"})
+                        Sisa {a.daysRemaining} hari (
+                        {a.record.remark.toLowerCase().includes("trial")
+                          ? "Trial"
+                          : "Sewa"}
+                        )
                       </span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-slate-400 italic">Tidak ada sewa mendekati jatuh tempo.</div>
+                <div className="text-xs text-slate-400 italic">
+                  Tidak ada sewa jatuh tempo minggu ini.
+                </div>
               )}
             </div>
           </div>
@@ -644,7 +899,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                     Downtime Mesin
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab Downtime Log
+                    Tab Downtime · {currentWeek.weekLabel}
                   </span>
                 </div>
               </div>
@@ -656,18 +911,35 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Metrics Snippet */}
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Total Downtime</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Total Downtime
+                </span>
                 <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                  {Math.round(downtimeStats.totalDowntimeHours).toLocaleString("id-ID")} <span className="text-xs font-normal text-slate-400">jam</span>
+                  {Math.round(downtimeStats.totalDowntimeHours).toLocaleString(
+                    "id-ID",
+                  )}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    jam
+                  </span>
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {Math.round(downtimeStats.totalDowntimeMinutes).toLocaleString("id-ID")} menit
+                  {Math.round(
+                    downtimeStats.totalDowntimeMinutes,
+                  ).toLocaleString("id-ID")}{" "}
+                  menit
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">Rata-rata / Kejadian</span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Rata-rata / Kejadian
+                </span>
                 <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
-                  {Math.round(downtimeStats.avgDurationMinutes).toLocaleString("id-ID")} <span className="text-xs font-normal text-slate-400">menit</span>
+                  {Math.round(downtimeStats.avgDurationMinutes).toLocaleString(
+                    "id-ID",
+                  )}{" "}
+                  <span className="text-xs font-normal text-slate-400">
+                    menit
+                  </span>
                 </div>
               </div>
             </div>
@@ -678,14 +950,20 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 <span>Downtime Terlama:</span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
                   {downtimeStats.topMachineType} (
-                  {Math.round(downtimeStats.topMachineTypeMinutes).toLocaleString("id-ID")} mnt)
+                  {Math.round(
+                    downtimeStats.topMachineTypeMinutes,
+                  ).toLocaleString("id-ID")}{" "}
+                  mnt)
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
                 <span>Line Tertinggi:</span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
                   {downtimeStats.topLine} (
-                  {Math.round(downtimeStats.topLineMinutes).toLocaleString("id-ID")} mnt)
+                  {Math.round(downtimeStats.topLineMinutes).toLocaleString(
+                    "id-ID",
+                  )}{" "}
+                  mnt)
                 </span>
               </div>
             </div>

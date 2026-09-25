@@ -26,6 +26,12 @@ interface OverallRequirementTableProps {
 type SortField = "machine" | "required" | "available" | "gap" | "utilization";
 type TabType = "mesin" | "style";
 
+const formatNumber = (num: number | null | undefined): string => {
+  if (num === null || num === undefined || isNaN(num)) return "0";
+  const rounded = Math.round(num * 100) / 100;
+  return rounded.toString();
+};
+
 export const OverallRequirementTable: React.FC<
   OverallRequirementTableProps
 > = ({ data, lineMatrix, onSelectMachine }) => {
@@ -562,7 +568,7 @@ export const OverallRequirementTable: React.FC<
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
-                      {item.required}
+                      {formatNumber(item.required)}
                     </td>
                     <td className="py-3.5 px-4 text-right font-bold">
                       <span
@@ -574,7 +580,7 @@ export const OverallRequirementTable: React.FC<
                               : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
                         }`}
                       >
-                        {item.gap > 0 ? `+${item.gap}` : item.gap}
+                        {item.gap > 0 ? `+${formatNumber(item.gap)}` : formatNumber(item.gap)}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -752,7 +758,7 @@ export const OverallRequirementTable: React.FC<
                                       : "text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-800/50"
                                   }`}
                                 >
-                                  {style.totalMachines}
+                                  {formatNumber(style.totalMachines)}
                                 </span>
                               </td>
                               <td className="py-3.5 px-4 text-center">
@@ -823,7 +829,7 @@ export const OverallRequirementTable: React.FC<
                                         )}
                                       </div>
                                       <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                                        Total {style.totalMachines} unit mesin
+                                        Total {formatNumber(style.totalMachines)} unit mesin
                                       </span>
                                     </div>
                                     <table className="w-full text-xs">
@@ -887,10 +893,10 @@ export const OverallRequirementTable: React.FC<
                                                   </div>
                                                 </td>
                                                 <td className="px-4 py-2.5 text-center font-bold text-indigo-600 dark:text-indigo-400">
-                                                  {count}
+                                                  {formatNumber(count)}
                                                 </td>
                                                 <td className="px-4 py-2.5 text-center font-medium text-slate-600 dark:text-slate-300">
-                                                  {available}
+                                                  {formatNumber(available)}
                                                 </td>
                                                 <td
                                                   className={`px-4 py-2.5 text-center font-bold ${
@@ -899,7 +905,7 @@ export const OverallRequirementTable: React.FC<
                                                       : "text-emerald-600 dark:text-emerald-400"
                                                   }`}
                                                 >
-                                                  {gap > 0 ? `+${gap}` : gap}
+                                                  {gap > 0 ? `+${formatNumber(gap)}` : formatNumber(gap)}
                                                 </td>
                                                 <td className="px-4 py-2.5 text-center">
                                                   {machineData

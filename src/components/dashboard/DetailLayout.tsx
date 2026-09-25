@@ -225,11 +225,12 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
               ? (accReqLookup[machineKey] || 0) 
               : (reqLookup[`${al.style}|${machineKey}`] || 0);
               
-          lineRequirements[al.line] = needed;
+          lineRequirements[al.line] = Math.round(needed * 100) / 100;
           kebutuhanTotal += needed;
         });
 
-        const gap = totalMesin - kebutuhanTotal;
+        kebutuhanTotal = Math.round(kebutuhanTotal * 100) / 100;
+        const gap = Math.round((totalMesin - kebutuhanTotal) * 100) / 100;
 
         return {
           machine,
@@ -259,16 +260,16 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
       sewaCount: rows.reduce((sum, r) => sum + r.sewaCount, 0),
       trialCount: rows.reduce((sum, r) => sum + r.trialCount, 0),
       totalMesin: rows.reduce((sum, r) => sum + r.totalMesin, 0),
-      kebutuhanTotal: rows.reduce((sum, r) => sum + r.kebutuhanTotal, 0),
-      gap: rows.reduce((sum, r) => sum + r.gap, 0),
+      kebutuhanTotal: Math.round(rows.reduce((sum, r) => sum + r.kebutuhanTotal, 0) * 100) / 100,
+      gap: Math.round(rows.reduce((sum, r) => sum + r.gap, 0) * 100) / 100,
       lineRequirements: {} as Record<string, number>,
     };
 
     activeLines.forEach((al) => {
-      totals.lineRequirements[al.line] = rows.reduce(
+      totals.lineRequirements[al.line] = Math.round(rows.reduce(
         (sum, r) => sum + (r.lineRequirements[al.line] || 0),
         0,
-      );
+      ) * 100) / 100;
     });
 
     return { rows, totals };
