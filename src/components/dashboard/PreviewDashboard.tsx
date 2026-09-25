@@ -774,15 +774,11 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                     Analytics
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Dashboard ringkasan ketersediaan,
-                    <br></br>status kepemilikan, utilitas, distribusi
-                    <br></br>usia, serta analisis mesin shortage
+                    Dashboard ringkasan ketersediaan, status kepemilikan,
+                    utilitas, distribusi usia, serta analisis mesin shortage
                   </span>
                 </div>
               </div>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
-                Utilisasi {capacityStats.overallUtilization}%
-              </span>
             </div>
 
             {/* Metrics Snippet */}

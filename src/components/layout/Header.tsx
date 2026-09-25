@@ -8,6 +8,8 @@ import {
   RefreshCw,
   PanelLeftClose,
   PanelLeftOpen,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { GOOGLE_SHEET_URL } from "../../utils/googleSheetsAPI";
 import { Moon, Sun } from "lucide-react";
@@ -23,6 +25,8 @@ interface HeaderProps {
   toggleDarkMode: () => void;
   onToggleSidebar?: () => void;
   isSidebarCollapsed?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,9 +40,11 @@ export const Header: React.FC<HeaderProps> = ({
   toggleDarkMode,
   onToggleSidebar,
   isSidebarCollapsed = false,
+  isFullscreen = false,
+  onToggleFullscreen,
 }) => {
   return (
-    <header className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-sm transition-colors">
+    <header className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800 shrink-0 z-30 shadow-sm transition-colors">
       <div className="w-full px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           {/* Logo, Sidebar Toggle, and Title */}
@@ -154,6 +160,21 @@ export const Header: React.FC<HeaderProps> = ({
                 <Moon className="w-3.5 h-3.5" />
               )}
             </button>
+
+            {/* Fullscreen Toggle */}
+            {onToggleFullscreen && (
+              <button
+                onClick={onToggleFullscreen}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors shrink-0"
+                title={isFullscreen ? "Keluar Full Screen (Esc)" : "Full Screen Mode"}
+              >
+                {isFullscreen ? (
+                  <Minimize2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Maximize2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>

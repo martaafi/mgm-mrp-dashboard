@@ -51,3 +51,37 @@
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Custom Table Scrollbar (more visible horizontal/vertical scrollbars for data tables) */
+.table-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 9px;
+}
+
+.table-scrollbar::-webkit-scrollbar-track {
+  background: rgba(100, 116, 139, 0.15);
+  border-radius: 4px;
+}
+
+.dark .table-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 4px;
+}
+
+.table-scrollbar::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 4px;
+}
+
+.table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+.dark .table-scrollbar::-webkit-scrollbar-thumb {
+  background: #6366f1;
+  border-radius: 4px;
+}
+
+.dark .table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #818cf8;
+}

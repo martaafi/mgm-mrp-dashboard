@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { Minimize2, Moon, Sun } from "lucide-react";
 import { fetchAllMRPData, fetchDowntimeData, CACHE_KEYS } from "./utils/googleSheetsAPI";
 import {
   ProductionPlan,
@@ -211,6 +212,25 @@ export default function App() {
       localStorage.setItem("darkMode", "false");
     }
   }, [isDarkMode]);
+
+  // 6. Fullscreen Mode
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
 
   const handleFilterChange = (key: keyof FilterState, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -463,23 +483,51 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
-      {/* Top Application Header */}
-      <Header
-        onOpenDataManager={() => setIsDataManagerOpen(true)}
-        onOpenReportModal={() => setIsReportModalOpen(true)}
-        onExportExcel={() => exportMRPToExcel(summaryData, lineMatrix)}
-        onExportCSV={() => exportSummaryToCSV(summaryData)}
-        onRefreshData={handleRefreshData}
-        isRefreshing={isRefreshing}
-        isDarkMode={isDarkMode}
-        toggleDarkMode={toggleDarkMode}
-        onToggleSidebar={handleToggleSidebar}
-        isSidebarCollapsed={isSidebarCollapsed}
-      />
+    <div className="h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors overflow-hidden">
+      {/* Top Application Header - Hidden in fullscreen */}
+      {!isFullscreen && (
+        <Header
+          onOpenDataManager={() => setIsDataManagerOpen(true)}
+          onOpenReportModal={() => setIsReportModalOpen(true)}
+          onExportExcel={() => exportMRPToExcel(summaryData, lineMatrix)}
+          onExportCSV={() => exportSummaryToCSV(summaryData)}
+          onRefreshData={handleRefreshData}
+          isRefreshing={isRefreshing}
+          isDarkMode={isDarkMode}
+          toggleDarkMode={toggleDarkMode}
+          onToggleSidebar={handleToggleSidebar}
+          isSidebarCollapsed={isSidebarCollapsed}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
+      )}
+
+      {/* Floating Mini Toolbar in Fullscreen */}
+      {isFullscreen && (
+        <div className="fixed top-3 right-3 z-50 flex items-center gap-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 rounded-xl px-2.5 py-1.5 shadow-lg transition-all">
+          <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mr-1">
+            {activeTab === 'preview' ? 'Preview' : activeTab === 'summary' ? 'Summary' : activeTab === 'history' ? 'Plan History' : activeTab === 'chart' ? 'Analytics' : activeTab === 'downtime' ? 'Downtime' : activeTab === 'detail' ? 'Detail' : 'Alerts'}
+          </span>
+          <button
+            onClick={toggleDarkMode}
+            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            title="Toggle Dark Mode"
+          >
+            {isDarkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+            title="Keluar Full Screen (Esc)"
+          >
+            <Minimize2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Main Container */}
-      <div className="flex-1 w-full flex overflow-hidden">
+      <div className="flex-1 w-full flex overflow-hidden min-h-0">
+        {/* Sidebar - Always visible, also in fullscreen */}
         <Sidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -488,10 +536,12 @@ export default function App() {
           onToggleCollapse={handleToggleSidebar}
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
         />
 
-        <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950">
-          <main className="w-full px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4 min-h-full">
+        <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-slate-950 min-w-0 min-h-0">
+          <main className={`w-full max-w-full px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4 min-w-0 overflow-x-hidden ${activeTab === 'history' ? 'flex-1 min-h-0' : 'shrink-0'}`}>
           {/* Filter Bar for Summary Tab */}
           {activeTab === "summary" && (
             <FilterBar
@@ -594,27 +644,27 @@ export default function App() {
             />
           )}
           </main>
+
+          {/* Footer attached at bottom of scrollable content area */}
+          <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-3.5 px-4 sm:px-6 lg:px-8 mt-auto shrink-0 transition-colors">
+            <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <div>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  Garment Sewing Machine Requirement Planning (MRP) Dashboard
+                </span>{" "}
+              </div>
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setIsDataManagerOpen(true)}
+                  className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium hover:underline cursor-pointer"
+                >
+                  Google Sheets Source Sync
+                </button>
+              </div>
+            </div>
+          </footer>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-5 mt-12 shadow-sm transition-colors">
-        <div className="w-full px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-          <div>
-            <span className="font-bold text-slate-800 dark:text-slate-200">
-              Garment Sewing Machine Requirement Planning (MRP) Dashboard
-            </span>{" "}
-          </div>
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setIsDataManagerOpen(true)}
-              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium hover:underline"
-            >
-              Google Sheets Source Sync
-            </button>
-          </div>
-        </div>
-      </footer>
 
       {/* MODALS / DRAWERS */}
       {/* 1. Detail Drill Down Modal */}

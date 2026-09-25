@@ -9,6 +9,8 @@ import {
   Wrench,
   PanelLeftClose,
   PanelLeftOpen,
+  Maximize2,
+  Minimize2,
   X,
 } from "lucide-react";
 
@@ -29,6 +31,8 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -39,6 +43,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   isMobileOpen = false,
   onCloseMobile,
+  isFullscreen = false,
+  onToggleFullscreen,
 }) => {
   const menuItems: {
     id: TabValue;
@@ -88,11 +94,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sidebar (Collapsible Rail) */}
       <aside
-        className={`bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 hidden lg:flex flex-col shrink-0 transition-all duration-300 ease-in-out z-20 ${
+        className={`bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 hidden lg:flex flex-col shrink-0 transition-all duration-300 ease-in-out z-20 h-full min-h-0 ${
           isCollapsed ? "w-16" : "w-64"
         }`}
       >
-        <div className={`flex-1 flex flex-col ${isCollapsed ? "p-2" : "p-4"}`}>
+        <div className={`flex-1 flex flex-col overflow-y-auto min-h-0 ${isCollapsed ? "p-2" : "p-4"}`}>
           {/* Header Area */}
           {isCollapsed ? (
             <div className="flex items-center justify-center mb-4 pt-1">
@@ -202,13 +208,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
-        {/* Footer Collapse Action Button */}
-        <div className="p-2 border-t border-slate-200 dark:border-slate-800">
+        {/* Footer Actions (Fullscreen Toggle & Collapse) */}
+        <div className="p-2 border-t border-slate-200 dark:border-slate-800 space-y-1">
+          {onToggleFullscreen && (
+            <button
+              onClick={onToggleFullscreen}
+              className={`w-full flex items-center ${
+                isCollapsed ? "justify-center px-0" : "px-3"
+              } py-2 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer`}
+              title={isFullscreen ? "Keluar Full Screen (Esc)" : "Full Screen Mode"}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-4 h-4 text-amber-500 shrink-0" />
+                  {!isCollapsed && <span className="ml-2 font-medium">Keluar Fullscreen</span>}
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-4 h-4 text-indigo-500 shrink-0" />
+                  {!isCollapsed && <span className="ml-2 font-medium">Full Screen</span>}
+                </>
+              )}
+            </button>
+          )}
+
           <button
             onClick={onToggleCollapse}
             className={`w-full flex items-center ${
               isCollapsed ? "justify-center px-0" : "px-3"
-            } py-2 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200 transition-colors`}
+            } py-2 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer`}
             title={
               isCollapsed
                 ? "Perlebar Sidebar (Buka Menu)"

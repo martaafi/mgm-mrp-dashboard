@@ -32,7 +32,6 @@ import {
 } from "recharts";
 import {
   AlertCircle,
-  Info,
   PieChart as PieChartIcon,
   Clock,
   Cpu,
@@ -219,7 +218,7 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
   if (!stats) return null;
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5 h-full flex flex-col justify-between">
       <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center">
         <Clock className="w-5 h-5 mr-2 text-amber-500" />
         Usia Mesin MGM Pringapus
@@ -265,9 +264,9 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
-        {/* Age Distribution Bar Chart (30%) */}
-        <div className="lg:col-span-3">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mt-auto">
+        {/* Age Distribution Bar Chart */}
+        <div className="md:col-span-5">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 text-center">
             Distribusi Usia Mesin
           </h3>
@@ -319,8 +318,8 @@ const MachineAgeSection: React.FC<{ inventoryRecords: InventoryRecord[] }> = ({
           </div>
         </div>
 
-        {/* Average Age per Machine Type (70%) */}
-        <div className="lg:col-span-7">
+        {/* Average Age per Machine Type */}
+        <div className="md:col-span-7">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 text-center">
             Rata-Rata Usia per Jenis Mesin
           </h3>
@@ -542,14 +541,14 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
     };
   }, [availabilities, machineRequirements]);
 
-  // Top 5 Most Critical Machines (sorted by shortage gap ascending, then highest utilization)
+  // Top 5 Mesin dengan Utilisasi Tertinggi (sorted by highest utilization percentage descending, then gap ascending)
   const topCriticalMachines = useMemo(() => {
     return [...machineRequirements]
       .sort((a, b) => {
-        if (a.gap !== b.gap) {
-          return a.gap - b.gap;
+        if (b.utilization !== a.utilization) {
+          return b.utilization - a.utilization;
         }
-        return b.utilization - a.utilization;
+        return a.gap - b.gap;
       })
       .slice(0, 5);
   }, [machineRequirements]);
@@ -643,7 +642,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
           </div>
 
           {/* KPI Summary Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl p-3.5 flex flex-col justify-between">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-medium">
                 <span>Total Ketersediaan</span>
@@ -720,10 +719,10 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
             </div>
           </div>
 
-          {/* 1-Row Section: Pie + Stacked Bar + Top 5 Mesin Kritis */}
-          <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
-            {/* Left: Ownership Pie Chart */}
-            <div className="lg:col-span-3 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          {/* 1-Row Section: Pie + Stacked Bar + Top 5 Mesin Kritis (Aligned with 4 KPI cards above: 1 + 2 + 1) */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            {/* Left: Ownership Pie Chart (Aligned with Total Ketersediaan - 1 Col) */}
+            <div className="lg:col-span-1 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Status Kepemilikan Mesin
@@ -732,14 +731,14 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                   {formatDecimal(capacityStats.totalCapacity)} unit total
                 </span>
               </div>
-              <div className="h-56 w-full">
+              <div className="flex-1 w-full min-h-[220px] my-auto">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                  <PieChart margin={{ top: 6, right: 6, bottom: 6, left: 6 }}>
                     <Pie
                       data={ownershipComposition}
                       cx="50%"
                       cy="50%"
-                      outerRadius={100}
+                      outerRadius="80%"
                       dataKey="value"
                       stroke="none"
                       strokeWidth={0}
@@ -749,7 +748,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                         // Geser vertikal per kategori supaya label slice kecil
                         // yang berdekatan (Pinjam vs Trial) tidak tumpang tindih
                         const LABEL_DY: Record<string, number> = {
-                          Pinjam: -24,
+                          Pinjam: -20,
                         };
                         const RADIAN = Math.PI / 180;
                         const cos = Math.cos(-midAngle * RADIAN);
@@ -757,11 +756,11 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                         const outer = outerRadius || 0;
                         const sx = cx + outer * cos;
                         const sy = cy + outer * sin;
-                        const lx = cx + (outer + 8) * cos;
+                        const lx = cx + (outer + 5) * cos;
                         const ly =
-                          cy + (outer + 8) * sin + (LABEL_DY[name] ?? 0);
+                          cy + (outer + 5) * sin + (LABEL_DY[name] ?? 0);
                         const anchor = lx > cx ? "start" : "end";
-                        const lineEndX = lx + (anchor === "start" ? -3 : 3);
+                        const lineEndX = lx + (anchor === "start" ? -2 : 2);
                         return (
                           <g>
                             <line
@@ -829,8 +828,8 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
               </div>
             </div>
 
-            {/* Middle: Stacked Bar Kepemilikan per Jenis Mesin */}
-            <div className="lg:col-span-5 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+            {/* Middle: Stacked Bar Kepemilikan per Jenis Mesin (Aligned with Total Kebutuhan + Rata-rata Utilisasi - 2 Cols) */}
+            <div className="lg:col-span-2 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Komposisi Kepemilikan per Jenis Mesin
@@ -925,9 +924,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                         fontSize={9}
                         fill="#94a3b8"
                         formatter={(v: any) =>
-                          !v || Number(v) === 0
-                            ? ""
-                            : formatDecimal(Number(v))
+                          !v || Number(v) === 0 ? "" : formatDecimal(Number(v))
                         }
                       />
                     </Bar>
@@ -936,8 +933,8 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
               </div>
             </div>
 
-            {/* Right: Top 5 Mesin Kritis / Utilisasi Tertinggi (vertical list) */}
-            <div className="lg:col-span-2 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col">
+            {/* Right: Top 5 Mesin Kritis / Utilisasi Tertinggi (Aligned with Status Shortage - 1 Col) */}
+            <div className="lg:col-span-1 bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/80 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between">
               <div className="mb-2">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                   Top 5 Mesin dengan Utilisasi Tertinggi
@@ -973,14 +970,17 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                               : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
                           }`}
                         >
-                          {isShortage ? `Shortage ${formatSignedDecimal(m.gap)}` : "Aman"}
+                          {isShortage
+                            ? `Shortage ${formatSignedDecimal(m.gap)}`
+                            : "Aman"}
                         </span>
                       </div>
                       <div className="text-slate-500 dark:text-slate-400 text-[11px]">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">
                           {formatDecimal(m.required)}
                         </span>{" "}
-                        / {formatDecimal(m.available)} unit ({formatDecimal(m.utilization)}%)
+                        / {formatDecimal(m.available)} unit (
+                        {formatDecimal(m.utilization)}%)
                       </div>
 
                       {/* Progress bar */}
@@ -998,175 +998,354 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
           </div>
         </div>
 
-        {/* Machine Age Analysis Section */}
-        {inventoryRecords.length > 0 && (
-          <MachineAgeSection inventoryRecords={inventoryRecords} />
-        )}
+        {/* Machine Age & Shortages Analysis Sections (60:40 Split) */}
+        {inventoryRecords.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+            {/* Left: Machine Age Analysis Section (60%) */}
+            <div className="lg:col-span-3 h-full">
+              <MachineAgeSection inventoryRecords={inventoryRecords} />
+            </div>
 
-        {/* Shortages Analysis Section */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center relative group w-max">
-              <AlertCircle className="w-5 h-5 mr-2 text-red-500" />
-              Analysis: Machine & Style Shortages
-              <Info className="w-4 h-4 ml-2 text-slate-400 cursor-help" />
-              <div className="absolute left-0 top-full mt-2 hidden group-hover:block w-80 p-3 bg-slate-800 border border-slate-700 text-xs text-slate-200 rounded-lg shadow-xl z-50 font-normal">
-                <strong>Klik pada baris mesin</strong> di tabel kiri untuk
-                memfilter tabel style di sebelah kanan.
-                <br />
-                <br />
-                <strong>Impact Score</strong> dihitung berdasarkan porsi
-                kebutuhan mesin oleh suatu style pada saat terjadi shortage.
+            {/* Right: Shortages Analysis Section (40%) */}
+            <div className="lg:col-span-2 h-full">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5 h-full flex flex-col justify-between">
+                <div>
+                  {/* Row 1: Title (Full width, No wrap) */}
+                  <div className="flex items-center justify-between mb-1">
+                    <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center whitespace-nowrap">
+                      <AlertCircle className="w-5 h-5 mr-2 text-red-500 shrink-0" />
+                      <span>Analisis Mesin &amp; Style Shortage</span>
+                    </h2>
+                  </div>
+
+                  {/* Row 2: Sub-keterangan on the left, Filter Mesin on the right */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Klik baris mesin di tabel untuk memfilter style. Impact Score dihitung berdasarkan porsi kebutuhan saat shortage.
+                    </p>
+                    <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                        Filter:
+                      </label>
+                      <select
+                        value={selectedStyleMachineFilter}
+                        onChange={(e) =>
+                          setSelectedStyleMachineFilter(e.target.value)
+                        }
+                        className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        {machineOptions.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt === "ALL" ? "All Machines" : opt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-4">
+                    {/* Panel 1: Machine Shortages Table */}
+                    <div className="flex flex-col gap-1.5">
+                      <h3 className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        List mesin yang sering mengalami shortage
+                      </h3>
+                      {machineShortages.length === 0 ? (
+                        <div className="text-center py-6 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-800/30 text-xs">
+                          No machine shortages detected.
+                        </div>
+                      ) : (
+                        <div className="overflow-auto max-h-[175px] border border-slate-200 dark:border-slate-800 rounded-lg">
+                          <table className="w-full text-left text-xs whitespace-nowrap">
+                            <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 shadow-xs">
+                              <tr>
+                                <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                                  Machine
+                                </th>
+                                <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                                  Shortage Days
+                                </th>
+                                <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                                  Max Daily Shortage
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                              {machineShortages.map((m, idx) => {
+                                const isSelected =
+                                  selectedStyleMachineFilter === m.machine;
+                                return (
+                                  <tr
+                                    key={idx}
+                                    onClick={() =>
+                                      setSelectedStyleMachineFilter(
+                                        isSelected ? "ALL" : m.machine,
+                                      )
+                                    }
+                                    className={`cursor-pointer transition-colors ${
+                                      isSelected
+                                        ? "bg-orange-50 dark:bg-orange-900/20"
+                                        : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                    }`}
+                                  >
+                                    <td className="px-3 py-2 font-bold text-slate-800 dark:text-slate-200">
+                                      {m.machine}
+                                    </td>
+                                    <td className="px-3 py-2 text-orange-500 font-medium">
+                                      {formatDecimal(m.shortageCount)} days
+                                    </td>
+                                    <td className="px-3 py-2 text-red-500 font-medium">
+                                      {formatDecimal(m.maxShortageVolume)}{" "}
+                                      units/day
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Panel 2: Style Shortages Table */}
+                    <div className="flex flex-col gap-1.5">
+                      <h3 className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        List style yang menyebabkan{" "}
+                        {selectedStyleMachineFilter !== "ALL"
+                          ? `[${selectedStyleMachineFilter}] `
+                          : ""}
+                        shortages
+                      </h3>
+                      {styleShortages.length === 0 ? (
+                        <div className="text-center py-6 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-800/30 text-xs">
+                          No styles causing shortages detected.
+                        </div>
+                      ) : (
+                        <div className="overflow-auto max-h-[210px] border border-slate-200 dark:border-slate-800 rounded-lg">
+                          <table className="w-full text-left text-xs whitespace-nowrap">
+                            <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 shadow-xs">
+                              <tr>
+                                <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                                  Style
+                                </th>
+                                <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                                  Machines Short
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                              {styleShortages.map((s, idx) => (
+                                <tr
+                                  key={idx}
+                                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                >
+                                  <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">
+                                    <div
+                                      className="truncate max-w-[200px]"
+                                      title={s.displayStyle}
+                                    >
+                                      {s.displayStyle}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+                                      Impact Score:{" "}
+                                      <strong className="text-red-500 dark:text-red-400">
+                                        {formatDecimal(s.shortageCount)} pts
+                                      </strong>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex flex-wrap gap-1">
+                                      {Array.from(
+                                        new Set(
+                                          s.machinesShort.map((m) =>
+                                            m.machine.toUpperCase(),
+                                          ),
+                                        ),
+                                      ).map((mType) => (
+                                        <span
+                                          key={mType}
+                                          className="px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 text-[10px] rounded font-medium border border-red-200 dark:border-red-800/50"
+                                        >
+                                          {mType}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </h2>
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                Filter Machine:
-              </label>
-              <select
-                value={selectedStyleMachineFilter}
-                onChange={(e) => setSelectedStyleMachineFilter(e.target.value)}
-                className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2 transition-colors cursor-pointer"
-              >
-                {machineOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt === "ALL" ? "All Machines" : opt}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
+        ) : (
+          /* Fallback when no inventory records exist: display full-width shortages section */
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-1.5">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center whitespace-nowrap">
+                <AlertCircle className="w-5 h-5 mr-2 text-red-500 shrink-0" />
+                <span>Analisis Mesin &amp; Style Shortage</span>
+              </h2>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Klik baris mesin di tabel untuk memfilter style. Impact Score dihitung berdasarkan porsi kebutuhan saat shortage.
+              </p>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Filter:
+                </label>
+                <select
+                  value={selectedStyleMachineFilter}
+                  onChange={(e) =>
+                    setSelectedStyleMachineFilter(e.target.value)
+                  }
+                  className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-lg px-2.5 py-1.5 transition-colors cursor-pointer outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {machineOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt === "ALL" ? "All Machines" : opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Left Panel: Machine Shortages Table */}
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                1. List Mesin yang Sering Mengalami Shortage
-              </h3>
-              {machineShortages.length === 0 ? (
-                <div className="text-center py-12 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-800/30">
-                  No machine shortages detected.
-                </div>
-              ) : (
-                <div className="overflow-auto max-h-[400px] border border-slate-200 dark:border-slate-800 rounded-lg">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                          Machine
-                        </th>
-                        <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                          Shortage Days
-                        </th>
-                        <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                          Max Daily Shortage
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {machineShortages.map((m, idx) => {
-                        const isSelected =
-                          selectedStyleMachineFilter === m.machine;
-                        return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Panel: Machine Shortages Table */}
+              <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  1. List Mesin yang Sering Mengalami Shortage
+                </h3>
+                {machineShortages.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-800/30">
+                    No machine shortages detected.
+                  </div>
+                ) : (
+                  <div className="overflow-auto max-h-[400px] border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 shadow-xs">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                            Machine
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                            Shortage Days
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                            Max Daily Shortage
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {machineShortages.map((m, idx) => {
+                          const isSelected =
+                            selectedStyleMachineFilter === m.machine;
+                          return (
+                            <tr
+                              key={idx}
+                              onClick={() =>
+                                setSelectedStyleMachineFilter(
+                                  isSelected ? "ALL" : m.machine,
+                                )
+                              }
+                              className={`cursor-pointer transition-colors ${
+                                isSelected
+                                  ? "bg-orange-50 dark:bg-orange-900/20"
+                                  : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                              }`}
+                            >
+                              <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">
+                                {m.machine}
+                              </td>
+                              <td className="px-4 py-3 text-orange-500 font-medium">
+                                {formatDecimal(m.shortageCount)} days
+                              </td>
+                              <td className="px-4 py-3 text-red-500 font-medium">
+                                {formatDecimal(m.maxShortageVolume)} units/day
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Panel: Style Shortages Table */}
+              <div className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                  2. List Style yang menyebabkan{" "}
+                  {selectedStyleMachineFilter !== "ALL"
+                    ? `[${selectedStyleMachineFilter}]`
+                    : ""}{" "}
+                  Shortages
+                </h3>
+                {styleShortages.length === 0 ? (
+                  <div className="text-center py-12 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-800/30">
+                    No styles causing shortages detected.
+                  </div>
+                ) : (
+                  <div className="overflow-auto max-h-[400px] border border-slate-200 dark:border-slate-800 rounded-lg">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 shadow-xs">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                            Style
+                          </th>
+                          <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800">
+                            Machines Short
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                        {styleShortages.map((s, idx) => (
                           <tr
                             key={idx}
-                            onClick={() =>
-                              setSelectedStyleMachineFilter(
-                                isSelected ? "ALL" : m.machine,
-                              )
-                            }
-                            className={`cursor-pointer transition-colors ${
-                              isSelected
-                                ? "bg-orange-50 dark:bg-orange-900/20"
-                                : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                            }`}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                           >
-                            <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">
-                              {m.machine}
+                            <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
+                              {s.displayStyle}
+                              <div className="text-xs text-slate-500 font-normal mt-0.5">
+                                Impact Score:{" "}
+                                <strong className="text-red-500 dark:text-red-400">
+                                  {formatDecimal(s.shortageCount)} pts
+                                </strong>
+                              </div>
                             </td>
-                            <td className="px-4 py-3 text-orange-500 font-medium">
-                              {formatDecimal(m.shortageCount)} days
-                            </td>
-                            <td className="px-4 py-3 text-red-500 font-medium">
-                              {formatDecimal(m.maxShortageVolume)} units/day
+                            <td className="px-4 py-3">
+                              <div className="flex flex-wrap gap-2">
+                                {Array.from(
+                                  new Set(
+                                    s.machinesShort.map((m) =>
+                                      m.machine.toUpperCase(),
+                                    ),
+                                  ),
+                                ).map((mType) => (
+                                  <span
+                                    key={mType}
+                                    className="px-2 py-1 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 text-xs rounded-md font-medium border border-red-200 dark:border-red-800/50"
+                                  >
+                                    {mType}
+                                  </span>
+                                ))}
+                              </div>
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Right Panel: Style Shortages Table */}
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                2. List Style yang menyebabkan{" "}
-                {selectedStyleMachineFilter !== "ALL"
-                  ? `[${selectedStyleMachineFilter}]`
-                  : ""}{" "}
-                Shortages
-              </h3>
-              {styleShortages.length === 0 ? (
-                <div className="text-center py-12 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 rounded-lg bg-slate-50 dark:bg-slate-800/30">
-                  No styles causing shortages detected.
-                </div>
-              ) : (
-                <div className="overflow-auto max-h-[400px] border border-slate-200 dark:border-slate-800 rounded-lg">
-                  <table className="w-full text-left text-sm whitespace-nowrap">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                          Style
-                        </th>
-                        <th className="px-4 py-3 font-semibold text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                          Machines Short
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                      {styleShortages.map((s, idx) => (
-                        <tr
-                          key={idx}
-                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                        >
-                          <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
-                            {s.displayStyle}
-                            <div className="text-xs text-slate-500 font-normal mt-0.5">
-                              Impact Score:{" "}
-                              <strong className="text-red-500 dark:text-red-400">
-                                {formatDecimal(s.shortageCount)} pts
-                              </strong>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-2">
-                              {Array.from(
-                                new Set(
-                                  s.machinesShort.map((m) =>
-                                    m.machine.toUpperCase(),
-                                  ),
-                                ),
-                              ).map((mType) => (
-                                <span
-                                  key={mType}
-                                  className="px-2 py-1 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-400 text-xs rounded-md font-medium border border-red-200 dark:border-red-800/50"
-                                >
-                                  {mType}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Trend Chart Section - Hidden temporarily per user request */}
         {false && (

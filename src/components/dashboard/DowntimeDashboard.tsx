@@ -132,10 +132,25 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
     [downtimeRecords],
   );
 
-  // --- Filtered data ---
+  // --- Filtered data (with Date Filter for KPIs & Breakdown cards) ---
   const filteredRecords = useMemo(
     () => filterDowntimeRecords(downtimeRecords, filters),
     [downtimeRecords, filters],
+  );
+
+  // --- Filtered data without Date Filter (for Trend Chart & Downtime Log Table) ---
+  const filtersWithoutDate = useMemo<DowntimeFilterState>(
+    () => ({
+      ...filters,
+      startDate: "",
+      endDate: "",
+    }),
+    [filters.line, filters.machineType, filters.brand],
+  );
+
+  const recordsForTrendAndTable = useMemo(
+    () => filterDowntimeRecords(downtimeRecords, filtersWithoutDate),
+    [downtimeRecords, filtersWithoutDate],
   );
 
   // --- Aggregated data ---
@@ -159,17 +174,17 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
     [byMachineType],
   );
   const trendData = useMemo(
-    () => getDowntimeTrendByWeek(filteredRecords),
-    [filteredRecords],
+    () => getDowntimeTrendByWeek(recordsForTrendAndTable),
+    [recordsForTrendAndTable],
   );
   const topErrors = useMemo(
     () => getTopErrors(filteredRecords, 8),
     [filteredRecords],
   );
 
-  // --- Table search + sort + pagination ---
+  // --- Table search + sort + pagination (exempt from date filter) ---
   const tableData = useMemo(() => {
-    let data = [...filteredRecords];
+    let data = [...recordsForTrendAndTable];
 
     // Search
     if (searchQuery) {
@@ -838,100 +853,273 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
         </div>
       </div>
 
-      {/* Chart 5: Trend Timeline (Full Width) */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <TrendingUp className="w-4 h-4 shrink-0 text-cyan-500" />
-          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
-            Tren Downtime per Minggu
-          </h3>
-          {trendData.length > 0 && (
-            <span className="text-[10px] text-slate-400 dark:text-slate-500">
-              ({trendData[0].weekLabel} –{" "}
-              {trendData[trendData.length - 1].weekLabel}
-              {trendData[0].year !== trendData[trendData.length - 1].year
-                ? ` • ${trendData[0].year}/${trendData[trendData.length - 1].year}`
-                : ` • ${trendData[0].year}`}
-              , {trendData.length} minggu)
-            </span>
-          )}
+      {/* 60:40 Grid: Tren Downtime per Minggu (60%) & Downtime Log (40%) */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-stretch">
+        {/* Left Column (60%): Chart Tren Downtime per Minggu */}
+        <div className="lg:col-span-3 min-w-0 flex flex-col">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5 h-full flex flex-col min-h-0">
+            <div className="flex items-center gap-2 mb-3 shrink-0">
+              <TrendingUp className="w-4 h-4 shrink-0 text-cyan-500" />
+              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                Tren Downtime per Minggu
+              </h3>
+              {trendData.length > 0 && (
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                  ({trendData[0].weekLabel} –{" "}
+                  {trendData[trendData.length - 1].weekLabel}
+                  {trendData[0].year !== trendData[trendData.length - 1].year
+                    ? ` • ${trendData[0].year}/${trendData[trendData.length - 1].year}`
+                    : ` • ${trendData[0].year}`}
+                  , {trendData.length} minggu)
+                </span>
+              )}
+            </div>
+            {trendData.length === 0 ? (
+              <div className="flex-1 min-h-[300px] flex items-center justify-center text-sm text-slate-400">
+                Tidak ada data tren
+              </div>
+            ) : (
+              <div className="flex-1 min-h-[340px] flex items-stretch gap-1">
+                <div className="flex items-center justify-center pb-12 shrink-0">
+                  <span className="[writing-mode:vertical-rl] rotate-180 whitespace-nowrap text-[10px] font-medium text-slate-400">
+                    Total Downtime (menit)
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0 h-full w-full min-h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={trendData} margin={{ left: 0, right: 10, top: 10, bottom: 0 }}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="currentColor"
+                        className="text-slate-200 dark:text-slate-700"
+                      />
+                      <XAxis
+                        dataKey="weekLabel"
+                        tick={{ fontSize: 9 }}
+                        angle={-90}
+                        textAnchor="end"
+                        interval={0}
+                        height={48}
+                        dy={2}
+                      />
+                      <YAxis
+                        yAxisId="left"
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        tickFormatter={(v) => formatDecimal(v, 0)}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        tick={{ fontSize: 10, fill: "#94a3b8" }}
+                        allowDecimals={false}
+                        tickFormatter={(v) => formatDecimal(v, 0)}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Legend
+                        wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                        formatter={(value) => (
+                          <span style={{ color: "#94a3b8" }}>{value}</span>
+                        )}
+                      />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="frequency"
+                        name="Frekuensi Kejadian"
+                        fill="#3b82f6"
+                        fillOpacity={0.55}
+                        radius={0}
+                        maxBarSize={14}
+                      />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="totalMinutes"
+                        name="Total Downtime"
+                        stroke="#ef4444"
+                        strokeWidth={3}
+                        dot={{ r: 2.5, fill: "#ef4444", strokeWidth: 0 }}
+                        activeDot={{ r: 4 }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex items-center justify-center pb-12 shrink-0">
+                  <span className="[writing-mode:vertical-rl] whitespace-nowrap text-[10px] font-medium text-slate-400">
+                    Frekuensi Kejadian
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        {trendData.length === 0 ? (
-          <div className="h-48 flex items-center justify-center text-sm text-slate-400">
-            Tidak ada data tren
-          </div>
-        ) : (
-          <div className="flex items-stretch gap-1">
-            <div className="flex items-center pb-10">
-              <span className="[writing-mode:vertical-rl] rotate-180 whitespace-nowrap text-[10px] font-medium text-slate-400">
-                Total Downtime (menit)
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <ResponsiveContainer width="100%" height={240}>
-                <ComposedChart data={trendData} margin={{ left: 0, right: 10 }}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="currentColor"
-                    className="text-slate-200 dark:text-slate-700"
-                  />
-                  <XAxis
-                    dataKey="weekLabel"
-                    tick={{ fontSize: 9 }}
-                    angle={-90}
-                    textAnchor="end"
-                    interval={0}
-                    height={48}
-                    dy={2}
-                  />
-                  <YAxis
-                    yAxisId="left"
-                    tick={{ fontSize: 10, fill: "#94a3b8" }}
-                    tickFormatter={(v) => formatDecimal(v, 0)}
-                  />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fontSize: 10, fill: "#94a3b8" }}
-                    allowDecimals={false}
-                    tickFormatter={(v) => formatDecimal(v, 0)}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend
-                    wrapperStyle={{ fontSize: 11 }}
-                    formatter={(value) => (
-                      <span style={{ color: "#94a3b8" }}>{value}</span>
+
+        {/* Right Column (40%): Detail Log Table */}
+        <div className="lg:col-span-2 min-w-0 flex flex-col">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5 h-full flex flex-col justify-between">
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 mb-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    Downtime Log
+                  </h3>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {formatDecimal(tableData.length, 0)} baris data
+                    {searchQuery && ` (filtered)`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Cari line, mesin..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="h-8 pl-8 pr-2.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 w-36 sm:w-44 focus:ring-2 focus:ring-indigo-500 transition-colors"
+                    />
+                  </div>
+                  <button
+                    onClick={handleExportExcel}
+                    className="inline-flex items-center gap-1 h-8 px-2.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Export
+                  </button>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto max-h-[290px] overflow-y-auto border border-slate-100 dark:border-slate-800 rounded-lg table-scrollbar">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 shadow-xs">
+                    <tr>
+                      {[
+                        { key: "line", line1: "Line", line2: "", align: "text-left" },
+                        { key: "tanggal", line1: "Date", line2: "", align: "text-left" },
+                        { key: "downtimeStart", line1: "Start", line2: "Time", align: "text-left" },
+                        { key: "downtimeStop", line1: "End", line2: "Time", align: "text-left" },
+                        { key: "prodMachType", line1: "Mach", line2: "Type", align: "text-center" },
+                        { key: "prodMach", line1: "Mach", line2: "Brand", align: "text-left" },
+                        { key: "jamKerja", line1: "Work", line2: "Hours", align: "text-center" },
+                        { key: "downtimeAktual", line1: "Actual", line2: "Downtime", align: "text-center" },
+                      ].map((col) => (
+                        <th
+                          key={col.key}
+                          onClick={() => handleSort(col.key)}
+                          className={`px-1.5 py-1.5 ${col.align} font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-tight cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 select-none align-bottom`}
+                        >
+                          <span className={`inline-flex items-center gap-0.5 ${col.align === "text-center" ? "justify-center" : "justify-start"} w-full`}>
+                            <span className="flex flex-col leading-tight">
+                              <span className="text-[10px] font-bold">{col.line1}</span>
+                              <span className="text-[9px] font-semibold opacity-75">{col.line2 || "\u00A0"}</span>
+                            </span>
+                            <span className="shrink-0 mt-0.5">
+                              <SortIcon col={col.key} />
+                            </span>
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {pagedData.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="px-3 py-12 text-center text-slate-400 dark:text-slate-500"
+                        >
+                          Tidak ada data downtime yang cocok.
+                        </td>
+                      </tr>
+                    ) : (
+                      pagedData.map((r, i) => {
+                        const severity = getSeverity(r.downtimeAktual);
+                        const sev = SEVERITY_COLORS[severity];
+                        return (
+                          <tr
+                            key={i}
+                            className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                          >
+                            <td className="px-1.5 py-1.5 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap text-left text-[11px]">
+                              {r.line}
+                            </td>
+                            <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-400 whitespace-nowrap text-left text-[10px]">
+                              {r.tanggal
+                                ? r.tanggal.split("-").reverse().join("/")
+                                : "-"}
+                            </td>
+                            <td className="px-1.5 py-1.5 text-slate-500 dark:text-slate-400 whitespace-nowrap text-left text-[10.5px]">
+                              {r.downtimeStart
+                                ? r.downtimeStart.replace(/^\d+\/\d+\/\d+\s/, "")
+                                : "-"}
+                            </td>
+                            <td className="px-1.5 py-1.5 text-slate-500 dark:text-slate-400 whitespace-nowrap text-left text-[10.5px]">
+                              {r.downtimeStop
+                                ? r.downtimeStop.replace(/^\d+\/\d+\/\d+\s/, "")
+                                : "-"}
+                            </td>
+                            <td className="px-1.5 py-1.5 whitespace-nowrap text-center">
+                              <span className="inline-flex px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-semibold text-[10px]">
+                                {r.prodMachType || "-"}
+                              </span>
+                            </td>
+                            <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-400 whitespace-nowrap text-left text-[11px]">
+                              {r.prodMach || "-"}
+                            </td>
+                            <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-400 whitespace-nowrap text-center text-[11px]">
+                              {typeof r.jamKerja === "number" ? formatDecimal(r.jamKerja, 0) : r.jamKerja}
+                            </td>
+                            <td className="px-1.5 py-1.5 whitespace-nowrap text-center">
+                              <span
+                                className={`inline-flex px-1.5 py-0.5 rounded font-bold text-[10px] border ${sev.bg} ${sev.text} ${sev.border}`}
+                              >
+                                {formatDecimal(r.downtimeAktual, 0)} mnt
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
-                  />
-                  <Bar
-                    yAxisId="right"
-                    dataKey="frequency"
-                    name="Frekuensi Kejadian"
-                    fill="#3b82f6"
-                    fillOpacity={0.55}
-                    radius={0}
-                    maxBarSize={14}
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="totalMinutes"
-                    name="Total Downtime"
-                    stroke="#ef4444"
-                    strokeWidth={3}
-                    dot={{ r: 2.5, fill: "#ef4444", strokeWidth: 0 }}
-                    activeDot={{ r: 4 }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="flex items-center pb-10">
-              <span className="[writing-mode:vertical-rl] whitespace-nowrap text-[10px] font-medium text-slate-400">
-                Frekuensi Kejadian
-              </span>
-            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-end mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+                <nav
+                  className="isolate inline-flex -space-x-px rounded-md shadow-sm"
+                  aria-label="Pagination"
+                >
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center rounded-l-md px-2 py-1.5 text-slate-400 dark:text-slate-500 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
+                  >
+                    <span className="sr-only">Previous</span>
+                    <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                  <span className="relative inline-flex items-center px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 focus:outline-offset-0 bg-slate-50 dark:bg-slate-800/50">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className="relative inline-flex items-center rounded-r-md px-2 py-1.5 text-slate-400 dark:text-slate-500 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
+                  >
+                    <span className="sr-only">Next</span>
+                    <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </nav>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* Top Errors Section */}
@@ -971,165 +1159,6 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
           </div>
         </div>
       )}
-
-      {/* Detail Log Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
-              Downtime Log
-            </h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              {formatDecimal(tableData.length, 0)} baris data
-              {searchQuery && ` (filtered)`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari line, mesin..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="h-8 pl-8 pr-3 text-xs rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 w-56 focus:ring-2 focus:ring-indigo-500 transition-colors"
-              />
-            </div>
-            <button
-              onClick={handleExportExcel}
-              className="inline-flex items-center gap-1 h-8 px-3 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
-            >
-              <Download className="w-3.5 h-3.5" /> Export
-            </button>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/80">
-                {[
-                  { key: "line", label: "Line" },
-                  { key: "tanggal", label: "Date" },
-                  { key: "downtimeStart", label: "Start" },
-                  { key: "downtimeStop", label: "End" },
-                  { key: "prodMachType", label: "Prod Mach Type" },
-                  { key: "prodMach", label: "Prod Mach" },
-                  { key: "jamKerja", label: "Work Hours" },
-                  { key: "downtimeAktual", label: "Actual Downtime" },
-                ].map((col) => (
-                  <th
-                    key={col.key}
-                    onClick={() => handleSort(col.key)}
-                    className="px-3 py-2.5 text-left font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 select-none whitespace-nowrap"
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      {col.label}
-                      <SortIcon col={col.key} />
-                    </span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {pagedData.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-3 py-12 text-center text-slate-400 dark:text-slate-500"
-                  >
-                    Tidak ada data downtime yang cocok.
-                  </td>
-                </tr>
-              ) : (
-                pagedData.map((r, i) => {
-                  const severity = getSeverity(r.downtimeAktual);
-                  const sev = SEVERITY_COLORS[severity];
-                  return (
-                    <tr
-                      key={i}
-                      className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-                    >
-                      <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                        {r.line}
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                        {r.tanggal
-                          ? r.tanggal.split("-").reverse().join("/")
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {r.downtimeStart
-                          ? r.downtimeStart.replace(/^\d+\/\d+\/\d+\s/, "")
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {r.downtimeStop
-                          ? r.downtimeStop.replace(/^\d+\/\d+\/\d+\s/, "")
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className="inline-flex px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-semibold text-[11px]">
-                          {r.prodMachType || "-"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                        {r.prodMach || "-"}
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap text-center">
-                        {typeof r.jamKerja === "number" ? formatDecimal(r.jamKerja, 0) : r.jamKerja}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span
-                          className={`inline-flex px-2 py-0.5 rounded-md font-bold text-[11px] border ${sev.bg} ${sev.text} ${sev.border}`}
-                        >
-                          {formatDecimal(r.downtimeAktual, 0)} menit
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-end mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <nav
-              className="isolate inline-flex -space-x-px rounded-md shadow-sm"
-              aria-label="Pagination"
-            >
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 dark:text-slate-500 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
-              >
-                <span className="sr-only">Previous</span>
-                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <span className="relative inline-flex items-center px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 focus:outline-offset-0 bg-slate-50 dark:bg-slate-800/50">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 dark:text-slate-500 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 focus:z-20 focus:outline-offset-0 transition-colors"
-              >
-                <span className="sr-only">Next</span>
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </nav>
-          </div>
-        )}
-      </div>
 
       {/* Apps Script Setup Modal */}
       {showAppsScriptModal && (

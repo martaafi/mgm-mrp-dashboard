@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   format,
   getISOWeek,
@@ -188,6 +188,24 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<"makro" | "detail">("makro");
   const [detailTab, setDetailTab] = useState<"mesin" | "style">("mesin");
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
+
+  // Ref + state to sync right column height with left column
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+  const [leftColumnHeight, setLeftColumnHeight] = useState<number | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    const el = leftColumnRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setLeftColumnHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const itemsPerPage = 50;
 
   const totalPages = Math.ceil(detailChangedSnapshots.length / itemsPerPage);
@@ -762,8 +780,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
           : `W${cleanUpdate}`
         : "";
 
-      if (lastW) lastVersionLabel = `by Plan PPIC ${lastW}`;
-      if (updateW) updateVersionLabel = `by Plan PPIC ${updateW}`;
+      if (lastW) lastVersionLabel = `Plan PPIC ${lastW}`;
+      if (updateW) updateVersionLabel = `Plan PPIC ${updateW}`;
       lastWeekCode = lastW;
       updateWeekCode = updateW;
 
@@ -1273,9 +1291,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-6 pb-8 h-full min-h-[500px]">
+    <div
+      className="flex flex-col gap-3 pb-2 w-full flex-1 min-h-0"
+    >
       {/* Sub-tabs Navigation */}
-      <div className="border-b border-slate-200 dark:border-slate-800 pb-2 transition-colors">
+      <div className="border-b border-slate-200 dark:border-slate-800 pb-2 transition-colors shrink-0">
         <nav className="flex space-x-1 p-1 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg backdrop-blur-sm w-fit transition-colors">
           <button
             onClick={() => setActiveSubTab("makro")}
@@ -1300,23 +1320,25 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         </nav>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 items-start h-full w-full">
+      <div
+        className="flex flex-col md:flex-row gap-4 items-stretch w-full flex-1 min-h-0"
+      >
         {activeSubTab === "detail" && (
           <>
             {/* Left Column: List of Changes */}
-            <div className="w-full md:w-1/3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden sticky top-6 max-h-[calc(100vh-2rem)] transition-colors">
-              <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between transition-colors">
-                <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                  <Clock className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
+            <div className="w-full md:w-[32%] lg:w-[30%] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-full min-h-0 transition-colors">
+              <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between transition-colors shrink-0">
+                <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center">
+                  <Clock className="w-4 h-4 mr-1.5 text-indigo-500 dark:text-indigo-400" />
                   History Perubahan PPIC
                 </h2>
-                <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full">
                   {detailChangedSnapshots.length}
                 </span>
               </div>
 
               {/* Date / Week Filter Section */}
-              <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 space-y-2">
+              <div className="p-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 space-y-1.5 shrink-0">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                     <Filter className="w-3 h-3 text-indigo-500" />
@@ -1356,14 +1378,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-auto bg-slate-50/50 dark:bg-slate-900/50 p-3 space-y-3 transition-colors [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
+              <div className="flex-1 overflow-auto bg-slate-50/50 dark:bg-slate-900/50 p-2 space-y-2 transition-colors table-scrollbar min-h-0">
                 {detailChangedSnapshots.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-48 text-slate-500 dark:text-slate-400 text-sm text-center px-4">
-                    <Info className="w-8 h-8 mb-2 text-slate-300 dark:text-slate-600" />
+                    <Info className="w-7 h-7 mb-1.5 text-slate-300 dark:text-slate-600" />
                     <p className="font-semibold text-xs text-slate-600 dark:text-slate-300">
                       Tidak ada perubahan planning
                     </p>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
                       pada periode yang sedang dipilih.
                     </p>
                   </div>
@@ -1376,7 +1398,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                       <div
                         key={idx}
                         onClick={() => setSelectedSnapshot(snapshot)}
-                        className={`p-4 rounded-xl cursor-pointer transition-all ${
+                        className={`p-2.5 rounded-lg cursor-pointer transition-all ${
                           isSelected
                             ? isMachineChange
                               ? "bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-400 dark:border-amber-500 shadow-sm ring-1 ring-amber-300 dark:ring-amber-600"
@@ -1386,40 +1408,42 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                               : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm text-slate-800 dark:text-slate-200"
                         }`}
                       >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-slate-800 dark:bg-slate-700 text-white">
+                        <div className="flex justify-between items-start mb-1.5">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-800 dark:bg-slate-700 text-white">
                               {snapshot.line}
                             </span>
-                            <span className="text-xs font-medium flex items-center text-slate-500 dark:text-slate-400">
+                            <span className="text-[11px] font-medium flex items-center text-slate-500 dark:text-slate-400">
                               <Calendar className="w-3 h-3 mr-1" />
                               {formatDate(snapshot.planningDate)}
                             </span>
                           </div>
                           {isMachineChange ? (
-                            <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
                           ) : (
-                            <Info className="w-4 h-4 text-blue-400" />
+                            <Info className="w-3.5 h-3.5 text-blue-400" />
                           )}
                         </div>
 
-                        <div className="space-y-1">
-                          <div className="text-xs line-through text-slate-500 dark:text-slate-400">
+                        <div className="space-y-0.5">
+                          <div className="text-[11px] line-through text-slate-500 dark:text-slate-400 truncate">
                             {snapshot.lastPlanningStyle || "Kosong"}
                           </div>
-                          <div className="flex items-center text-sm font-bold text-slate-800 dark:text-slate-200">
-                            <ArrowRight className="w-3 h-3 mr-1.5 text-emerald-500" />
-                            {snapshot.updatePlanningStyle || "Kosong"}
+                          <div className="flex items-center text-xs font-bold text-slate-800 dark:text-slate-200">
+                            <ArrowRight className="w-3 h-3 mr-1 text-emerald-500 shrink-0" />
+                            <span className="truncate">
+                              {snapshot.updatePlanningStyle || "Kosong"}
+                            </span>
                           </div>
                         </div>
 
-                        <div className="mt-3 text-[10px] flex items-center justify-between text-slate-400 dark:text-slate-500">
+                        <div className="mt-2 text-[9px] flex items-center justify-between text-slate-400 dark:text-slate-500">
                           <span>
                             Snapshot: {snapshot.lastVersion || "?"} →{" "}
                             {snapshot.updateVersion || "?"}
                           </span>
                           <ChevronRight
-                            className={`w-4 h-4 ${isSelected ? "text-indigo-500 dark:text-indigo-400" : "text-slate-300 dark:text-slate-600"}`}
+                            className={`w-3.5 h-3.5 ${isSelected ? "text-indigo-500 dark:text-indigo-400" : "text-slate-300 dark:text-slate-600"}`}
                           />
                         </div>
                       </div>
@@ -1430,15 +1454,15 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
               {/* Pagination Footer */}
               {detailChangedSnapshots.length > itemsPerPage && (
-                <div className="px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 transition-colors">
+                <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 transition-colors">
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
                     className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronLeft className="w-5 h-5" />
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
                     Page {currentPage} of {totalPages}
                   </span>
                   <button
@@ -1448,149 +1472,146 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                     disabled={currentPage === totalPages}
                     className="p-1 rounded text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   >
-                    <ChevronRight className="w-5 h-5" />
+                    <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
               )}
             </div>
 
             {/* --- DETAIL CONTENT (RIGHT COLUMN) --- */}
+            <div className="w-full md:w-[68%] lg:w-[70%] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-full min-h-0 transition-colors">
+              <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 transition-colors shrink-0">
+                <h2 className="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center">
+                  <Activity className="w-4 h-4 mr-2 text-emerald-500 dark:text-emerald-400" />
+                  Detail Perubahan Kebutuhan Mesin
+                </h2>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Analisis dampak perubahan planning style terhadap
+                  naik/turunnya kebutuhan mesin
+                </p>
+              </div>
 
-            <div className="w-full md:w-2/3 flex flex-col gap-6 overflow-x-hidden min-w-0">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden shrink-0 transition-colors">
-                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 transition-colors">
-                  <h2 className="font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                    <Activity className="w-5 h-5 mr-2 text-emerald-500 dark:text-emerald-400" />
-                    Detail Perubahan Kebutuhan Mesin
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Analisis dampak perubahan planning style terhadap
-                    naik/turunnya kebutuhan mesin
-                  </p>
-                </div>
-
-                <div className="flex-1 overflow-auto p-6">
-                  {!selectedSnapshot ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 py-16">
-                      <Activity className="w-12 h-12 mb-3 text-slate-200 dark:text-slate-700" />
-                      <p className="text-sm">
-                        Tidak ada perubahan planning pada periode yang dipilih.
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Pilih rentang tanggal atau week lain di panel kiri.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      {/* Context Header */}
-                      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between transition-colors">
-                        <div>
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                            Perubahan Plan Perhitungan Kebutuhan Mesin{" "}
-                            {selectedSnapshot.line} (
-                            {formatDate(selectedSnapshot.planningDate)})
-                          </h3>
-                          <div className="flex items-center mt-2 text-xs text-slate-600 dark:text-slate-400 gap-2 flex-wrap">
-                            <span className="bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">
-                              Plan{" "}
-                              {formatPlanWeekName(
-                                selectedSnapshot.lastVersion,
-                                weeklyComparisonData.lastWeekCode,
-                              ) || "Sebelum"}
-                              :{" "}
-                              <strong className="text-slate-700 dark:text-slate-300">
-                                {selectedSnapshot.lastMachineStyle || "Kosong"}
-                              </strong>
-                            </span>
-                            <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
-                            <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400 px-2 py-1 rounded">
-                              Plan{" "}
-                              {formatPlanWeekName(
-                                selectedSnapshot.updateVersion,
-                                weeklyComparisonData.updateWeekCode,
-                              ) || "Sesudah"}
-                              :{" "}
-                              <strong>
-                                {selectedSnapshot.updateMachineStyle ||
-                                  "Kosong"}
-                              </strong>
-                            </span>
-                          </div>
+              <div className="flex-1 min-h-0 flex flex-col p-3 space-y-2.5 overflow-hidden">
+                {!selectedSnapshot ? (
+                  <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 py-16">
+                    <Activity className="w-10 h-10 mb-2 text-slate-200 dark:text-slate-700" />
+                    <p className="text-xs">
+                      Tidak ada perubahan planning pada periode yang dipilih.
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Pilih rentang tanggal atau week lain di panel kiri.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Context Header */}
+                    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 flex flex-col sm:flex-row gap-2 sm:items-center justify-between transition-colors shrink-0">
+                      <div>
+                        <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Perubahan Plan Perhitungan Kebutuhan Mesin{" "}
+                          {selectedSnapshot.line} (
+                          {formatDate(selectedSnapshot.planningDate)})
+                        </h3>
+                        <div className="flex items-center mt-1.5 text-[11px] text-slate-600 dark:text-slate-400 gap-1.5 flex-wrap">
+                          <span className="bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-[11px]">
+                            Plan{" "}
+                            {formatPlanWeekName(
+                              selectedSnapshot.lastVersion,
+                              weeklyComparisonData.lastWeekCode,
+                            ) || "Sebelum"}
+                            :{" "}
+                            <strong className="text-slate-700 dark:text-slate-300">
+                              {selectedSnapshot.lastMachineStyle || "Kosong"}
+                            </strong>
+                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                          <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400 px-2 py-0.5 rounded text-[11px]">
+                            Plan{" "}
+                            {formatPlanWeekName(
+                              selectedSnapshot.updateVersion,
+                              weeklyComparisonData.updateWeekCode,
+                            ) || "Sesudah"}
+                            :{" "}
+                            <strong>
+                              {selectedSnapshot.updateMachineStyle || "Kosong"}
+                            </strong>
+                          </span>
                         </div>
                       </div>
+                    </div>
 
-                      {!selectedSnapshot.isMachineStyleChanged ? (
-                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-lg p-5 flex items-start">
-                          <Info className="w-6 h-6 text-blue-500 dark:text-blue-400 mr-3 shrink-0 mt-0.5" />
-                          <div>
-                            <h4 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-1">
-                              Aman, Hanya Penambahan/Pengurangan Style Planning
-                            </h4>
-                            <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">
-                              Perubahan yang dilakukan oleh PPIC hanya sekadar
-                              menambah atau mengurangi{" "}
-                              <strong>Planning Style</strong>, tetapi tidak
-                              mengubah acuan{" "}
-                              <strong>
-                                Style yang digunakan dalam Perhitungan Kebutuhan
-                                Mesin
-                              </strong>
-                              . Oleh karena itu, kebutuhan mesin di pabrik sama
-                              sekali tidak terdampak.
-                            </p>
-                          </div>
+                    {!selectedSnapshot.isMachineStyleChanged ? (
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-lg p-2.5 flex items-start shrink-0">
+                        <Info className="w-4 h-4 text-blue-500 dark:text-blue-400 mr-2 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-0.5">
+                            Aman, Hanya Penambahan/Pengurangan Style Planning
+                          </h4>
+                          <p className="text-[11px] text-blue-600 dark:text-blue-400 leading-snug">
+                            Perubahan yang dilakukan oleh PPIC hanya sekadar
+                            menambah atau mengurangi{" "}
+                            <strong>Planning Style</strong>, tetapi tidak
+                            mengubah acuan{" "}
+                            <strong>
+                              Style yang digunakan dalam Perhitungan Kebutuhan
+                              Mesin
+                            </strong>
+                            . Kebutuhan mesin di pabrik sama sekali tidak
+                            terdampak.
+                          </p>
                         </div>
-                      ) : !impactAnalysis ||
-                        impactAnalysis.comparison.length === 0 ? (
-                        <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-5 flex items-start">
-                          <AlertCircle className="w-6 h-6 text-slate-400 dark:text-slate-500 mr-3 shrink-0 mt-0.5" />
-                          <div>
-                            <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
-                              Tidak Ada Data Kebutuhan
-                            </h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                              Sistem tidak dapat membandingkan kebutuhan karena
-                              data mesin untuk style ini belum terdaftar di
-                              database.
-                            </p>
-                          </div>
+                      </div>
+                    ) : !impactAnalysis ||
+                      impactAnalysis.comparison.length === 0 ? (
+                      <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 flex items-start shrink-0">
+                        <AlertCircle className="w-4 h-4 text-slate-400 dark:text-slate-500 mr-2 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                            Tidak Ada Data Kebutuhan
+                          </h4>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                            Sistem tidak dapat membandingkan kebutuhan karena
+                            data mesin untuk style ini belum terdaftar di
+                            database.
+                          </p>
                         </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {impactAnalysis.hasCriticalImpact && (
-                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg p-4 flex items-center shadow-sm">
-                              <AlertTriangle className="w-6 h-6 text-amber-500 dark:text-amber-400 mr-4 shrink-0" />
-                              <div>
-                                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-1">
-                                  Peringatan: Kebutuhan Mesin Bertambah!
-                                </h4>
-                                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                                  Perubahan planning ini membutuhkan{" "}
-                                  <strong>tambahan mesin</strong> jika
-                                  dibandingkan dengan
-                                  <strong> planning style sebelumnya</strong>.
-                                  Periksa tabel di bawah pada baris yang
-                                  ditandai merah/kuning untuk mengantisipasi{" "}
-                                  <em>shortage</em>.
-                                </p>
-                              </div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 min-h-0 flex flex-col justify-between">
+                        {impactAnalysis.hasCriticalImpact && (
+                          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg p-2.5 flex items-center shadow-xs shrink-0 mb-2.5">
+                            <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-amber-400 mr-2.5 shrink-0" />
+                            <div>
+                              <h4 className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                                Peringatan: Kebutuhan Mesin Bertambah!
+                              </h4>
+                              <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-snug">
+                                Perubahan planning ini membutuhkan{" "}
+                                <strong>tambahan mesin</strong> jika
+                                dibandingkan dengan{" "}
+                                <strong>planning style sebelumnya</strong>.
+                                Periksa baris bertanda merah untuk
+                                mengantisipasi <em>shortage</em>.
+                              </p>
                             </div>
-                          )}
+                          </div>
+                        )}
 
-                          <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm transition-colors">
-                            <table className="w-full text-sm text-left">
-                              <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
+                        <div className="flex-1 min-h-0 border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-xs flex flex-col bg-white dark:bg-slate-900 transition-colors">
+                          <div className="overflow-auto flex-1 table-scrollbar">
+                            <table className="w-full text-xs text-left">
+                              <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors shadow-xs">
                                 <tr>
-                                  <th className="px-4 py-3 font-semibold">
+                                  <th className="px-3 py-2 font-semibold whitespace-nowrap">
                                     Jenis Mesin
                                   </th>
-                                  <th className="px-4 py-3 font-semibold text-center">
+                                  <th className="px-3 py-2 font-semibold text-center whitespace-nowrap">
                                     Kebutuhan Lama
                                   </th>
-                                  <th className="px-4 py-3 font-semibold text-center">
+                                  <th className="px-3 py-2 font-semibold text-center whitespace-nowrap">
                                     Kebutuhan Baru
                                   </th>
-                                  <th className="px-4 py-3 font-semibold text-center">
+                                  <th className="px-3 py-2 font-semibold text-center whitespace-nowrap">
                                     Selisih
                                   </th>
                                 </tr>
@@ -1603,13 +1624,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                   let diffText = "Tetap";
 
                                   if (row.isNew || row.isIncreased) {
-                                    rowClass = "bg-red-50 dark:bg-red-900/30";
+                                    rowClass =
+                                      "bg-red-50/70 dark:bg-red-900/30";
                                     diffClass =
                                       "text-red-600 dark:text-red-400 font-bold";
                                     diffText = `+${formatDecimal(row.diff)} (Bertambah)`;
                                   } else if (row.isDecreased) {
                                     rowClass =
-                                      "bg-emerald-50 dark:bg-emerald-900/30";
+                                      "bg-emerald-50/60 dark:bg-emerald-900/20";
                                     diffClass =
                                       "text-emerald-600 dark:text-emerald-400 font-medium";
                                     diffText = `${formatDecimal(row.diff)} (Berkurang)`;
@@ -1620,21 +1642,21 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                       key={i}
                                       className={`${rowClass} transition-colors hover:brightness-95`}
                                     >
-                                      <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
+                                      <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
                                         {row.machine}
                                       </td>
-                                      <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
+                                      <td className="px-3 py-2 text-center text-slate-500 dark:text-slate-400 whitespace-nowrap">
                                         {row.oldReq
                                           ? formatDecimal(row.oldReq)
                                           : "-"}
                                       </td>
-                                      <td className="px-4 py-3 text-center font-bold text-slate-800 dark:text-slate-200">
+                                      <td className="px-3 py-2 text-center font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                                         {row.newReq
                                           ? formatDecimal(row.newReq)
                                           : "-"}
                                       </td>
                                       <td
-                                        className={`px-4 py-3 text-center text-xs ${diffClass}`}
+                                        className={`px-3 py-2 text-center text-xs whitespace-nowrap ${diffClass}`}
                                       >
                                         {diffText}
                                       </td>
@@ -1645,21 +1667,30 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                             </table>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-1 shrink-0 px-1">
+                          <span>
+                            {impactAnalysis.comparison.length} jenis mesin
+                            terdata
+                          </span>
+                          <span>
+                            Scroll tabel ke bawah jika data mesin panjang
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </>
         )}
         {/* --- MAKRO CONTENT --- */}
         {activeSubTab === "makro" && (
-          <div className="w-full flex flex-col gap-6 overflow-x-hidden min-w-0">
+          <div className="w-full flex-1 min-h-0 flex flex-col gap-4 overflow-x-hidden min-w-0">
             {/* 1. Macro Factory Impact Table */}
             {(factoryImpact || weeklyComparisonData.chartData.length > 0) && (
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-5 md:p-6 shrink-0 transition-colors">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5 flex-1 min-h-0 flex flex-col transition-colors">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 shrink-0">
                   <div>
                     <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
                       <Activity className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
@@ -1689,895 +1720,1004 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                   </div>
                 </div>
 
-                {/* Weekly Comparison Chart */}
+                {/* Weekly Comparison Chart & Detail Tables (60:40 Split) */}
                 {weeklyComparisonData.chartData.length > 0 && (
-                  <div className="mb-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                      <div className="flex items-center">
-                        <BarChart2 className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
-                        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                          Perbandingan Kebutuhan Mesin per Minggu
-                        </h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 items-stretch flex-1 min-h-0 w-full min-w-0 max-w-full">
+                    {/* Left Column (60%): Shortage Alerts & Weekly Comparison Chart */}
+                    <div
+                      ref={leftColumnRef}
+                      className="lg:col-span-3 flex flex-col min-w-0 h-full min-h-0"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 shrink-0">
+                        <div className="flex items-center">
+                          <BarChart2 className="w-5 h-5 mr-2 text-indigo-500 dark:text-indigo-400" />
+                          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                            Perbandingan Kebutuhan Mesin per Minggu
+                          </h4>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Filter className="w-4 h-4 text-slate-400" />
+                          <select
+                            value={chartMachineFilter}
+                            onChange={(e) =>
+                              setChartMachineFilter(e.target.value)
+                            }
+                            className="text-xs border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
+                          >
+                            <option value="ALL">Semua Jenis Mesin</option>
+                            {allChartMachineTypes.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-slate-400" />
-                        <select
-                          value={chartMachineFilter}
-                          onChange={(e) =>
-                            setChartMachineFilter(e.target.value)
-                          }
-                          className="text-xs border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors"
-                        >
-                          <option value="ALL">Semua Jenis Mesin</option>
-                          {allChartMachineTypes.map((m) => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
+
+                      {weeklyComparisonData.alerts.length > 0 && (
+                        <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg px-3.5 py-2 mb-2 flex items-start gap-2 shrink-0">
+                          <AlertCircle className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
+                          <div className="text-xs text-slate-700 dark:text-slate-300 w-full">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5 border-b border-slate-200 dark:border-slate-700 pb-1.5">
+                              <span className="font-bold">
+                                Shortage Alerts:
+                              </span>
+                              <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-red-400"></span>{" "}
+                                  Tidak Shortage → Menjadi Shortage
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-orange-400"></span>{" "}
+                                  Shortage Bertambah
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-slate-400"></span>{" "}
+                                  Shortage Tetap
+                                </span>
+                              </div>
+                            </div>
+                            <div className="grid grid-rows-5 grid-flow-col gap-x-3 gap-y-1.5 overflow-x-auto pb-1 justify-start items-start">
+                              {weeklyComparisonData.alerts.map((a, i) => (
+                                <div key={i}>
+                                  <strong>{a.week.split("-")[0]}</strong>:{" "}
+                                  {a.shortageAlerts.map(
+                                    (alert: any, j: number) => (
+                                      <span
+                                        key={j}
+                                        title={`Before: ${formatDecimal(alert.lastReq)}, After: ${formatDecimal(alert.updateReq)} (Kapasitas: ${formatDecimal(alert.availCount)})`}
+                                        className={`inline-block mr-1.5 mb-1.5 px-2 py-1 rounded text-[10px] font-semibold border cursor-help ${
+                                          alert.type === "RED"
+                                            ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50"
+                                            : alert.type === "ORANGE"
+                                              ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50"
+                                              : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                                        }`}
+                                      >
+                                        {alert.machine}
+                                      </span>
+                                    ),
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 transition-colors flex-1 min-h-[260px] flex flex-col justify-between">
+                        <div className="w-full flex-1 min-h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+                            <LineChart
+                            data={weeklyComparisonData.chartData}
+                            margin={{ top: 35, right: 30, left: 10, bottom: 5 }}
+                            onClick={(e: any) => {
+                              if (!e) return;
+                              if (
+                                e.activePayload &&
+                                e.activePayload.length > 0
+                              ) {
+                                setSelectedChartWeek(
+                                  e.activePayload[0].payload.week,
+                                );
+                              } else if (e.activeLabel) {
+                                setSelectedChartWeek(e.activeLabel);
+                              } else if (
+                                typeof e.activeTooltipIndex === "number" &&
+                                weeklyComparisonData.chartData[
+                                  e.activeTooltipIndex
+                                ]
+                              ) {
+                                setSelectedChartWeek(
+                                  weeklyComparisonData.chartData[
+                                    e.activeTooltipIndex
+                                  ].week,
+                                );
+                              }
+                            }}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              opacity={0.3}
+                            />
+                            <XAxis
+                              dataKey="week"
+                              tick={{ fontSize: 11, fill: "#94a3b8" }}
+                              axisLine={{ stroke: "#e2e8f0" }}
+                              tickFormatter={(val) => String(val).split("-")[0]}
+                            />
+                            <YAxis
+                              tick={{ fontSize: 11, fill: "#94a3b8" }}
+                              axisLine={{ stroke: "#e2e8f0" }}
+                              label={{
+                                value: "Jumlah Mesin",
+                                angle: -90,
+                                position: "insideLeft",
+                                style: { fontSize: 11, fill: "#94a3b8" },
+                              }}
+                            />
+                            <Tooltip
+                              content={({ active, payload, label }: any) => {
+                                if (active && payload && payload.length) {
+                                  const weekLabel = String(label).split("-")[0];
+
+                                  return (
+                                    <div className="bg-slate-900/95 border border-indigo-500/30 rounded-lg p-3 text-xs text-slate-200 shadow-xl backdrop-blur-sm">
+                                      <p className="font-bold mb-2 text-white">
+                                        {weekLabel}
+                                      </p>
+                                      {payload.map((p: any, index: number) => {
+                                        const labels: Record<string, string> = {
+                                          lastPlan:
+                                            weeklyComparisonData.lastVersionLabel,
+                                          updatePlan:
+                                            weeklyComparisonData.updateVersionLabel,
+                                          available: "Tersedia",
+                                        };
+                                        return (
+                                          <p
+                                            key={index}
+                                            className="my-1 font-medium"
+                                            style={{ color: p.color }}
+                                          >
+                                            {labels[p.dataKey] || p.dataKey} :{" "}
+                                            {formatDecimal(p.value)}
+                                          </p>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="lastPlan"
+                              stroke="#94a3b8"
+                              strokeWidth={2.5}
+                              dot={false}
+                              activeDot={{
+                                r: 6,
+                                stroke: "#94a3b8",
+                                strokeWidth: 2,
+                                onClick: (_: any, event: any) => {
+                                  const data = event?.payload;
+                                  if (data?.week)
+                                    setSelectedChartWeek(data.week);
+                                },
+                              }}
+                              name="lastPlan"
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="updatePlan"
+                              stroke="#4f46e5"
+                              strokeWidth={2.5}
+                              dot={renderAlertDot}
+                              activeDot={{
+                                r: 6,
+                                stroke: "#4f46e5",
+                                strokeWidth: 2,
+                                onClick: (_: any, event: any) => {
+                                  const data = event?.payload;
+                                  if (data?.week)
+                                    setSelectedChartWeek(data.week);
+                                },
+                              }}
+                              name="updatePlan"
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="available"
+                              stroke="#10b981"
+                              strokeWidth={2}
+                              strokeDasharray="4 4"
+                              dot={false}
+                              name="available"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        </div>
+
+                        <div className="flex items-center justify-center gap-4 mt-2 text-[10px] text-slate-500 dark:text-slate-400 shrink-0 flex-wrap">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <span className="w-4 h-0.5 bg-slate-400 inline-block" />
+                            {weeklyComparisonData.lastVersionLabel}
+                          </span>
+                          <span className="flex items-center gap-1.5 font-semibold text-indigo-600 dark:text-indigo-400">
+                            <span className="w-4 h-0.5 bg-indigo-600 inline-block" />
+                            {weeklyComparisonData.updateVersionLabel}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span
+                              className="w-4 h-0.5 inline-block"
+                              style={{ borderTop: "2px dashed #10b981" }}
+                            />
+                            Ketersediaan Mesin
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 bg-red-500 rounded-full inline-block" />
+                            Tidak Shortage → Menjadi Shortage
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-3 h-3 bg-orange-500 rounded-full inline-block" />
+                            Shortage Bertambah
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {weeklyComparisonData.alerts.length > 0 && (
-                      <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 mb-4 flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />
-                        <div className="text-xs text-slate-700 dark:text-slate-300 w-full">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 border-b border-slate-200 dark:border-slate-700 pb-2">
-                            <span className="font-bold">Shortage Alerts:</span>
-                            <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
-                              <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-red-400"></span>{" "}
-                                Tidak Shortage → Menjadi Shortage
+                    {/* Right Column (40%): Detail Minggu & Tables */}
+                    <div
+                      className="lg:col-span-2 flex flex-col w-full max-w-full min-w-0 h-full min-h-0"
+                      style={{
+                        maxHeight: leftColumnHeight
+                          ? `${leftColumnHeight}px`
+                          : undefined,
+                      }}
+                    >
+                      {/* Week selector dropdown + Tab buttons */}
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap shrink-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                            Detail Minggu:
+                          </span>
+                          <select
+                            value={selectedChartWeek || ""}
+                            onChange={(e) => {
+                              setSelectedChartWeek(e.target.value);
+                              setExpandedLines(new Set());
+                            }}
+                            className="text-xs font-semibold border border-slate-300 dark:border-slate-600 rounded-lg px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors cursor-pointer shadow-sm"
+                          >
+                            {weeklyComparisonData.chartData.map((d) => {
+                              const weekShort = String(d.week).split("-")[0];
+                              const hasAlert =
+                                d.shortageAlerts && d.shortageAlerts.length > 0;
+                              return (
+                                <option key={d.week} value={d.week}>
+                                  {weekShort}{" "}
+                                  {hasAlert ? "⚠️ (Ada Shortage)" : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden shadow-sm shrink-0">
+                          <button
+                            onClick={() => {
+                              setDetailTab("mesin");
+                              setExpandedLines(new Set());
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold transition-all duration-200 cursor-pointer border-r border-slate-300 dark:border-slate-600 ${
+                              detailTab === "mesin"
+                                ? "bg-indigo-500 text-white shadow-inner"
+                                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                            }`}
+                          >
+                            <Cpu className="w-3.5 h-3.5" />
+                            Ketersediaan Mesin
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDetailTab("style");
+                              setExpandedLines(new Set());
+                            }}
+                            className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold transition-all duration-200 cursor-pointer ${
+                              detailTab === "style"
+                                ? "bg-indigo-500 text-white shadow-inner"
+                                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                            }`}
+                          >
+                            <Layers className="w-3.5 h-3.5" />
+                            Detail Style
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Per-Line Style Detail Table (tab: style) */}
+                      {detailTab === "style" &&
+                        selectedChartWeek &&
+                        selectedWeekLineData.length > 0 && (
+                          <div className="w-full max-w-full min-w-0 flex-1 min-h-0 flex flex-col justify-between overflow-hidden">
+                            <div className="w-full max-w-full min-w-0 flex-1 min-h-0 flex flex-col border border-indigo-200 dark:border-indigo-800/50 rounded-xl overflow-hidden shadow-sm transition-all duration-300 bg-white dark:bg-slate-900">
+                              <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between shrink-0">
+                                <h4 className="text-xs font-bold text-indigo-800 dark:text-indigo-300 flex items-center">
+                                  <Layers className="w-4 h-4 mr-1.5" />
+                                  Detail Style per Line —{" "}
+                                  {String(selectedChartWeek).split("-")[0]}
+                                </h4>
+                                <span className="text-[10px] text-indigo-500 dark:text-indigo-400">
+                                  Klik baris untuk detail mesin
+                                </span>
+                              </div>
+                              <div className="w-full max-w-full min-w-0 overflow-auto flex-1 table-scrollbar">
+                                <table className="w-full min-w-[700px] text-xs text-left border-collapse">
+                                  <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-20 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors shadow-xs">
+                                    <tr>
+                                      <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[80px]">
+                                        Line
+                                      </th>
+                                      <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 min-w-[180px]">
+                                        <div>Style Plan (Before)</div>
+                                        <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                          (
+                                          {
+                                            weeklyComparisonData.lastVersionLabel
+                                          }
+                                          )
+                                        </div>
+                                      </th>
+                                      <th className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400 min-w-[180px]">
+                                        <div>Style Plan (After)</div>
+                                        <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                          (
+                                          {
+                                            weeklyComparisonData.updateVersionLabel
+                                          }
+                                          )
+                                        </div>
+                                      </th>
+                                      <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[140px]">
+                                        Tanggal
+                                      </th>
+                                      <th className="px-4 py-3 font-semibold text-center text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
+                                        <div>Kebutuhan</div>
+                                        <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                          Before
+                                        </div>
+                                      </th>
+                                      <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[100px]">
+                                        <div>Kebutuhan</div>
+                                        <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                          After
+                                        </div>
+                                      </th>
+                                      <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[80px]">
+                                        Detail
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
+                                    {selectedWeekLineData.map((lineData) => {
+                                      const totalLineRows =
+                                        lineData.styles.reduce(
+                                          (sum, s) =>
+                                            sum +
+                                            1 +
+                                            (expandedLines.has(
+                                              `${lineData.line}_${s.startDate}_${s.updateStyle}_${s.lastStyle}`,
+                                            )
+                                              ? 1
+                                              : 0),
+                                          0,
+                                        );
+
+                                      return (
+                                        <React.Fragment key={lineData.line}>
+                                          {lineData.styles.map((style, idx) => {
+                                            const styleKey = `${lineData.line}_${style.startDate}_${style.updateStyle}_${style.lastStyle}`;
+                                            const isExpanded =
+                                              expandedLines.has(styleKey);
+
+                                            const toggleExpand = () => {
+                                              setExpandedLines((prev) => {
+                                                const next = new Set(prev);
+                                                if (next.has(styleKey)) {
+                                                  next.delete(styleKey);
+                                                } else {
+                                                  next.add(styleKey);
+                                                }
+                                                return next;
+                                              });
+                                            };
+
+                                            let rowBg =
+                                              "bg-white dark:bg-slate-900";
+                                            let rowBorder =
+                                              "border-l-4 border-l-transparent";
+                                            if (style.hasWorseGap) {
+                                              rowBg =
+                                                "bg-red-50/60 dark:bg-red-950/35";
+                                              rowBorder =
+                                                "border-l-4 border-l-red-500";
+                                            } else if (style.hasShortage) {
+                                              rowBg =
+                                                "bg-amber-50/40 dark:bg-amber-950/20";
+                                              rowBorder =
+                                                "border-l-4 border-l-amber-500";
+                                            } else if (style.styleChanged) {
+                                              rowBg =
+                                                "bg-blue-50/30 dark:bg-blue-900/10";
+                                            }
+
+                                            return (
+                                              <React.Fragment key={styleKey}>
+                                                <tr
+                                                  className={`${rowBg} ${rowBorder} transition-colors hover:brightness-[0.97] dark:hover:brightness-110 cursor-pointer select-none`}
+                                                  onClick={toggleExpand}
+                                                >
+                                                  {idx === 0 && (
+                                                    <td
+                                                      className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200 align-top border-r border-slate-200/60 dark:border-slate-700/60"
+                                                      rowSpan={totalLineRows}
+                                                    >
+                                                      <div className="flex items-center gap-1.5 sticky top-2">
+                                                        <span
+                                                          className={`text-xs font-bold px-2 py-0.5 rounded-md text-white ${
+                                                            lineData.hasWorseGap
+                                                              ? "bg-red-600 dark:bg-red-700"
+                                                              : lineData.hasShortage
+                                                                ? "bg-amber-600 dark:bg-amber-700"
+                                                                : "bg-slate-800 dark:bg-slate-700"
+                                                          }`}
+                                                        >
+                                                          {lineData.line}
+                                                        </span>
+                                                        {lineData.hasWorseGap && (
+                                                          <span
+                                                            className="flex items-center gap-0.5 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800/50 animate-pulse"
+                                                            title="Line ini memiliki perubahan style yang memperparah kekurangan mesin (Gap memburuk)"
+                                                          >
+                                                            <AlertTriangle className="w-3 h-3" />
+                                                            Gap ↑
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    </td>
+                                                  )}
+
+                                                  {/* Style Before */}
+                                                  <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
+                                                    <span className="font-medium">
+                                                      {style.lastDisplayStyle ||
+                                                        style.lastStyle}
+                                                    </span>
+                                                  </td>
+
+                                                  {/* Style After */}
+                                                  <td className="px-4 py-3 text-xs max-w-[240px]">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                      <span
+                                                        className={`font-semibold ${
+                                                          style.hasWorseGap
+                                                            ? "text-red-700 dark:text-red-300 font-bold"
+                                                            : style.hasShortage
+                                                              ? "text-amber-700 dark:text-amber-300 font-bold"
+                                                              : "text-slate-800 dark:text-slate-200"
+                                                        }`}
+                                                      >
+                                                        {style.updateDisplayStyle ||
+                                                          style.updateStyle}
+                                                      </span>
+                                                      {style.hasShortage && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800/70 shadow-sm animate-pulse">
+                                                          <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
+                                                          <span>
+                                                            Shortage (
+                                                            {style.shortageMachines.join(
+                                                              ", ",
+                                                            )}
+                                                            )
+                                                          </span>
+                                                        </span>
+                                                      )}
+                                                      {style.styleChanged &&
+                                                        !style.hasShortage && (
+                                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                                                            Ganti Style
+                                                          </span>
+                                                        )}
+                                                    </div>
+                                                  </td>
+
+                                                  {/* Tanggal */}
+                                                  <td
+                                                    className={`px-4 py-3 text-center whitespace-nowrap text-xs ${
+                                                      style.hasShortage
+                                                        ? "text-red-800 dark:text-red-300 font-medium"
+                                                        : "text-slate-600 dark:text-slate-300"
+                                                    }`}
+                                                  >
+                                                    {style.startDate ? (
+                                                      style.startDate ===
+                                                      style.endDate ? (
+                                                        format(
+                                                          new Date(
+                                                            style.startDate +
+                                                              "T00:00:00",
+                                                          ),
+                                                          "dd MMM yyyy",
+                                                        )
+                                                      ) : (
+                                                        <span>
+                                                          {format(
+                                                            new Date(
+                                                              style.startDate +
+                                                                "T00:00:00",
+                                                            ),
+                                                            "dd MMM yyyy",
+                                                          )}
+                                                          <span className="text-slate-400 dark:text-slate-500 mx-1 font-normal">
+                                                            s/d
+                                                          </span>
+                                                          {format(
+                                                            new Date(
+                                                              style.endDate +
+                                                                "T00:00:00",
+                                                            ),
+                                                            "dd MMM yyyy",
+                                                          )}
+                                                        </span>
+                                                      )
+                                                    ) : (
+                                                      "-"
+                                                    )}
+                                                  </td>
+
+                                                  {/* Kebutuhan Before */}
+                                                  <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap text-xs">
+                                                    {style.totalLastReq
+                                                      ? formatDecimal(
+                                                          style.totalLastReq,
+                                                        )
+                                                      : "-"}
+                                                  </td>
+
+                                                  {/* Kebutuhan After */}
+                                                  <td
+                                                    className={`px-4 py-3 text-center font-bold whitespace-nowrap text-xs ${
+                                                      style.hasWorseGap
+                                                        ? "text-red-600 dark:text-red-400"
+                                                        : style.hasShortage
+                                                          ? "text-amber-600 dark:text-amber-400"
+                                                          : "text-indigo-600 dark:text-indigo-400"
+                                                    }`}
+                                                  >
+                                                    {style.totalUpdateReq
+                                                      ? formatDecimal(
+                                                          style.totalUpdateReq,
+                                                        )
+                                                      : "-"}
+                                                  </td>
+
+                                                  {/* Detail Button */}
+                                                  <td className="px-4 py-3 text-center whitespace-nowrap">
+                                                    <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleExpand();
+                                                      }}
+                                                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors border shadow-sm ${
+                                                        isExpanded
+                                                          ? "bg-indigo-600 text-white border-indigo-600 shadow-indigo-500/20"
+                                                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                                      }`}
+                                                      title="Lihat detail kebutuhan mesin style ini"
+                                                    >
+                                                      <span>Mesin</span>
+                                                      <ChevronDown
+                                                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                                          isExpanded
+                                                            ? "rotate-180"
+                                                            : ""
+                                                        }`}
+                                                      />
+                                                    </button>
+                                                  </td>
+                                                </tr>
+
+                                                {/* Expanded machine breakdown for THIS style period */}
+                                                {isExpanded && (
+                                                  <tr>
+                                                    <td
+                                                      colSpan={6}
+                                                      className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60"
+                                                    >
+                                                      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-inner">
+                                                        <div className="px-4 py-2 bg-slate-100 dark:bg-slate-700/60 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                                                          <span>
+                                                            Breakdown Kebutuhan
+                                                            Mesin:{" "}
+                                                            <strong>
+                                                              {style.updateDisplayStyle ||
+                                                                style.updateStyle}
+                                                            </strong>
+                                                          </span>
+                                                        </div>
+                                                        {style.machineBreakdown
+                                                          .length === 0 ? (
+                                                          <div className="p-3 text-center text-xs text-slate-400">
+                                                            Tidak ada kebutuhan
+                                                            mesin untuk style
+                                                            ini.
+                                                          </div>
+                                                        ) : (
+                                                          <table className="w-full text-xs">
+                                                            <thead>
+                                                              <tr className="bg-slate-50 dark:bg-slate-700/40 text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-700/80">
+                                                                <th className="px-4 py-2 text-left font-semibold">
+                                                                  Jenis Mesin
+                                                                </th>
+                                                                <th className="px-4 py-2 text-center font-semibold text-emerald-600 dark:text-emerald-400">
+                                                                  Tersedia
+                                                                </th>
+                                                                <th className="px-4 py-2 text-center font-semibold text-slate-600 dark:text-slate-400">
+                                                                  Kebutuhan
+                                                                  Before (
+                                                                  {
+                                                                    weeklyComparisonData.lastVersionLabel
+                                                                  }
+                                                                  )
+                                                                </th>
+                                                                <th className="px-4 py-2 text-center font-semibold text-indigo-600 dark:text-indigo-400">
+                                                                  Kebutuhan
+                                                                  After (
+                                                                  {
+                                                                    weeklyComparisonData.updateVersionLabel
+                                                                  }
+                                                                  )
+                                                                </th>
+                                                                <th className="px-4 py-2 text-center font-semibold">
+                                                                  Status
+                                                                </th>
+                                                              </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
+                                                              {style.machineBreakdown.map(
+                                                                (m) => {
+                                                                  const isShortage =
+                                                                    m.available <
+                                                                    m.updateReq;
+                                                                  const isReqIncreased =
+                                                                    m.updateReq >
+                                                                    m.lastReq;
+
+                                                                  let mRowBg =
+                                                                    "hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors";
+                                                                  if (
+                                                                    isShortage
+                                                                  ) {
+                                                                    mRowBg +=
+                                                                      " bg-red-50/60 dark:bg-red-950/25";
+                                                                  } else if (
+                                                                    isReqIncreased
+                                                                  ) {
+                                                                    mRowBg +=
+                                                                      " bg-amber-50/40 dark:bg-amber-950/20";
+                                                                  }
+
+                                                                  return (
+                                                                    <tr
+                                                                      key={
+                                                                        m.machine
+                                                                      }
+                                                                      className={
+                                                                        mRowBg
+                                                                      }
+                                                                    >
+                                                                      <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">
+                                                                        {
+                                                                          m.machine
+                                                                        }
+                                                                      </td>
+                                                                      <td className="px-4 py-2 text-center font-medium text-slate-600 dark:text-slate-300">
+                                                                        {formatDecimal(
+                                                                          m.available,
+                                                                        )}
+                                                                      </td>
+                                                                      <td className="px-4 py-2 text-center font-medium text-slate-500 dark:text-slate-400">
+                                                                        {formatDecimal(
+                                                                          m.lastReq,
+                                                                        )}
+                                                                      </td>
+                                                                      <td
+                                                                        className={`px-4 py-2 text-center font-bold ${
+                                                                          isShortage
+                                                                            ? "text-red-600 dark:text-red-400"
+                                                                            : isReqIncreased
+                                                                              ? "text-indigo-600 dark:text-indigo-400"
+                                                                              : "text-slate-700 dark:text-slate-200"
+                                                                        }`}
+                                                                      >
+                                                                        {formatDecimal(
+                                                                          m.updateReq,
+                                                                        )}
+                                                                      </td>
+                                                                      <td className="px-4 py-2 text-center">
+                                                                        {isShortage ? (
+                                                                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                                                            Shortage
+                                                                            (
+                                                                            {formatSignedDecimal(
+                                                                              m.gapAfter,
+                                                                            )}
+                                                                            )
+                                                                          </span>
+                                                                        ) : isReqIncreased ? (
+                                                                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                                                                            Naik
+                                                                            (+
+                                                                            {formatDecimal(
+                                                                              m.updateReq -
+                                                                                m.lastReq,
+                                                                            )}
+                                                                            )
+                                                                          </span>
+                                                                        ) : (
+                                                                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                                            Aman
+                                                                          </span>
+                                                                        )}
+                                                                      </td>
+                                                                    </tr>
+                                                                  );
+                                                                },
+                                                              )}
+                                                            </tbody>
+                                                          </table>
+                                                        )}
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                )}
+                                              </React.Fragment>
+                                            );
+                                          })}
+                                        </React.Fragment>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 px-1 shrink-0">
+                              <span>
+                                {selectedWeekLineData.length} line terdata
                               </span>
-                              <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-orange-400"></span>{" "}
-                                Shortage Bertambah
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-slate-400"></span>{" "}
-                                Shortage Tetap
+                              <span className="text-slate-400 dark:text-slate-500">
+                                ↕ Scroll tabel ke bawah untuk baris lainnya
                               </span>
                             </div>
                           </div>
-                          <div className="grid grid-rows-5 grid-flow-col gap-x-3 gap-y-1.5 overflow-x-auto pb-1 justify-start items-start">
-                            {weeklyComparisonData.alerts.map((a, i) => (
-                              <div key={i}>
-                                <strong>{a.week.split("-")[0]}</strong>:{" "}
-                                {a.shortageAlerts.map(
-                                  (alert: any, j: number) => (
-                                    <span
-                                      key={j}
-                                      title={`Before: ${formatDecimal(alert.lastReq)}, After: ${formatDecimal(alert.updateReq)} (Kapasitas: ${formatDecimal(alert.availCount)})`}
-                                      className={`inline-block mr-1.5 mb-1.5 px-2 py-1 rounded text-[10px] font-semibold border cursor-help ${
-                                        alert.type === "RED"
-                                          ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50"
-                                          : alert.type === "ORANGE"
-                                            ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50"
-                                            : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
-                                      }`}
-                                    >
-                                      {alert.machine}
-                                    </span>
-                                  ),
-                                )}
-                              </div>
-                            ))}
+                        )}
+
+                      {detailTab === "style" &&
+                        selectedChartWeek &&
+                        selectedWeekLineData.length === 0 && (
+                          <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-slate-400 dark:text-slate-500 border border-indigo-200 dark:border-indigo-800/50 rounded-xl bg-white dark:bg-slate-900">
+                            Tidak ada data style pada{" "}
+                            {String(selectedChartWeek).split("-")[0]}.
                           </div>
-                        </div>
-                      </div>
-                    )}
+                        )}
 
-                    <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 transition-colors">
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart
-                          data={weeklyComparisonData.chartData}
-                          margin={{ top: 35, right: 30, left: 10, bottom: 5 }}
-                          onClick={(e: any) => {
-                            if (!e) return;
-                            if (e.activePayload && e.activePayload.length > 0) {
-                              setSelectedChartWeek(
-                                e.activePayload[0].payload.week,
-                              );
-                            } else if (e.activeLabel) {
-                              setSelectedChartWeek(e.activeLabel);
-                            } else if (
-                              typeof e.activeTooltipIndex === "number" &&
-                              weeklyComparisonData.chartData[
-                                e.activeTooltipIndex
-                              ]
-                            ) {
-                              setSelectedChartWeek(
-                                weeklyComparisonData.chartData[
-                                  e.activeTooltipIndex
-                                ].week,
-                              );
-                            }
-                          }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                          <XAxis
-                            dataKey="week"
-                            tick={{ fontSize: 11, fill: "#94a3b8" }}
-                            axisLine={{ stroke: "#e2e8f0" }}
-                            tickFormatter={(val) => String(val).split("-")[0]}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 11, fill: "#94a3b8" }}
-                            axisLine={{ stroke: "#e2e8f0" }}
-                            label={{
-                              value: "Jumlah Mesin",
-                              angle: -90,
-                              position: "insideLeft",
-                              style: { fontSize: 11, fill: "#94a3b8" },
-                            }}
-                          />
-                          <Tooltip
-                            content={({ active, payload, label }: any) => {
-                              if (active && payload && payload.length) {
-                                const weekLabel = String(label).split("-")[0];
-
-                                return (
-                                  <div className="bg-slate-900/95 border border-indigo-500/30 rounded-lg p-3 text-xs text-slate-200 shadow-xl backdrop-blur-sm">
-                                    <p className="font-bold mb-2 text-white">
-                                      {weekLabel}
-                                    </p>
-                                    {payload.map((p: any, index: number) => {
-                                      const labels: Record<string, string> = {
-                                        lastPlan:
-                                          weeklyComparisonData.lastVersionLabel,
-                                        updatePlan:
-                                          weeklyComparisonData.updateVersionLabel,
-                                        available: "Tersedia",
-                                      };
-                                      return (
-                                        <p
-                                          key={index}
-                                          className="my-1 font-medium"
-                                          style={{ color: p.color }}
-                                        >
-                                          {labels[p.dataKey] || p.dataKey} :{" "}
-                                          {formatDecimal(p.value)}
-                                        </p>
-                                      );
-                                    })}
-                                  </div>
-                                );
-                              }
-                              return null;
-                            }}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="lastPlan"
-                            stroke="#94a3b8"
-                            strokeWidth={2.5}
-                            dot={false}
-                            activeDot={{
-                              r: 6,
-                              stroke: "#94a3b8",
-                              strokeWidth: 2,
-                              onClick: (_: any, event: any) => {
-                                const data = event?.payload;
-                                if (data?.week) setSelectedChartWeek(data.week);
-                              },
-                            }}
-                            name="lastPlan"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="updatePlan"
-                            stroke="#4f46e5"
-                            strokeWidth={2.5}
-                            dot={renderAlertDot}
-                            activeDot={{
-                              r: 6,
-                              stroke: "#4f46e5",
-                              strokeWidth: 2,
-                              onClick: (_: any, event: any) => {
-                                const data = event?.payload;
-                                if (data?.week) setSelectedChartWeek(data.week);
-                              },
-                            }}
-                            name="updatePlan"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="available"
-                            stroke="#10b981"
-                            strokeWidth={2}
-                            strokeDasharray="4 4"
-                            dot={false}
-                            name="available"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-
-                      <div className="flex items-center justify-center gap-4 mt-3 text-[10px] text-slate-500 dark:text-slate-400">
-                        <span className="flex items-center gap-1.5 font-medium">
-                          <span className="w-4 h-0.5 bg-slate-400 inline-block" />
-                          {weeklyComparisonData.lastVersionLabel}
-                        </span>
-                        <span className="flex items-center gap-1.5 font-semibold text-indigo-600 dark:text-indigo-400">
-                          <span className="w-4 h-0.5 bg-indigo-600 inline-block" />
-                          {weeklyComparisonData.updateVersionLabel}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span
-                            className="w-4 h-0.5 inline-block"
-                            style={{ borderTop: "2px dashed #10b981" }}
-                          />
-                          Ketersediaan Mesin
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="w-3 h-3 bg-red-500 rounded-full inline-block" />
-                          Tidak Shortage → Menjadi Shortage
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <span className="w-3 h-3 bg-orange-500 rounded-full inline-block" />
-                          Shortage Bertambah
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Week selector dropdown + Tab buttons */}
-                <div className="flex items-center gap-3 mb-4 flex-wrap">
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Detail Minggu:
-                  </span>
-                  <select
-                    value={selectedChartWeek || ""}
-                    onChange={(e) => {
-                      setSelectedChartWeek(e.target.value);
-                      setExpandedLines(new Set());
-                    }}
-                    className="text-xs font-semibold border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-colors cursor-pointer shadow-sm"
-                  >
-                    {weeklyComparisonData.chartData.map((d) => {
-                      const weekShort = String(d.week).split("-")[0];
-                      const hasAlert =
-                        d.shortageAlerts && d.shortageAlerts.length > 0;
-                      return (
-                        <option key={d.week} value={d.week}>
-                          {weekShort} {hasAlert ? "⚠️ (Ada Shortage)" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-
-                  {/* Tabs */}
-                  <div className="flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden shadow-sm">
-                    <button
-                      onClick={() => {
-                        setDetailTab("mesin");
-                        setExpandedLines(new Set());
-                      }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer border-r border-slate-300 dark:border-slate-600 ${
-                        detailTab === "mesin"
-                          ? "bg-indigo-500 text-white shadow-inner"
-                          : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-                      }`}
-                    >
-                      <Cpu className="w-3.5 h-3.5" />
-                      Ketersediaan Mesin
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDetailTab("style");
-                        setExpandedLines(new Set());
-                      }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer ${
-                        detailTab === "style"
-                          ? "bg-indigo-500 text-white shadow-inner"
-                          : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
-                      }`}
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      Detail Style
-                    </button>
-                  </div>
-                </div>
-
-                {/* Per-Line Style Detail Table (tab: style) */}
-                {detailTab === "style" &&
-                  selectedChartWeek &&
-                  selectedWeekLineData.length > 0 && (
-                    <div className="mb-6 border border-indigo-200 dark:border-indigo-800/50 rounded-xl overflow-hidden shadow-sm transition-all duration-300">
-                      <div className="px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-indigo-800 dark:text-indigo-300 flex items-center">
-                          <Layers className="w-4 h-4 mr-2" />
-                          Detail Style per Line —{" "}
-                          {String(selectedChartWeek).split("-")[0]}
-                        </h4>
-                        <span className="text-[10px] text-indigo-500 dark:text-indigo-400">
-                          Klik baris untuk detail mesin
-                        </span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[780px] text-sm text-left border-collapse">
-                          <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
-                            <tr>
-                              <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[80px]">
-                                Line
-                              </th>
-                              <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 min-w-[180px]">
-                                <div>Style Plan (Before)</div>
-                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                  ({weeklyComparisonData.lastVersionLabel})
-                                </div>
-                              </th>
-                              <th className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400 min-w-[180px]">
-                                <div>Style Plan (After)</div>
-                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                  ({weeklyComparisonData.updateVersionLabel})
-                                </div>
-                              </th>
-                              <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[140px]">
-                                Tanggal
-                              </th>
-                              <th className="px-4 py-3 font-semibold text-center text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                                <div>Kebutuhan</div>
-                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                  Before
-                                </div>
-                              </th>
-                              <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[100px]">
-                                <div>Kebutuhan</div>
-                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                  After
-                                </div>
-                              </th>
-                              <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[80px]">
-                                Detail
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
-                            {selectedWeekLineData.map((lineData) => {
-                              const totalLineRows = lineData.styles.reduce(
-                                (sum, s) =>
-                                  sum +
-                                  1 +
-                                  (expandedLines.has(
-                                    `${lineData.line}_${s.startDate}_${s.updateStyle}_${s.lastStyle}`,
-                                  )
-                                    ? 1
-                                    : 0),
-                                0,
-                              );
-
-                              return (
-                                <React.Fragment key={lineData.line}>
-                                  {lineData.styles.map((style, idx) => {
-                                    const styleKey = `${lineData.line}_${style.startDate}_${style.updateStyle}_${style.lastStyle}`;
-                                    const isExpanded =
-                                      expandedLines.has(styleKey);
-
-                                    const toggleExpand = () => {
-                                      setExpandedLines((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(styleKey)) {
-                                          next.delete(styleKey);
-                                        } else {
-                                          next.add(styleKey);
+                      {/* Machine Availability Table (tab: mesin) */}
+                      {detailTab === "mesin" &&
+                      selectedChartWeek &&
+                      selectedWeekMachineData.length > 0 ? (
+                        <div className="w-full max-w-full min-w-0 flex-1 min-h-0 flex flex-col justify-between overflow-hidden">
+                          <div className="w-full max-w-full min-w-0 flex-1 min-h-0 flex flex-col border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm bg-white dark:bg-slate-900 transition-colors">
+                            <div className="w-full max-w-full min-w-0 overflow-y-auto overflow-x-hidden flex-1 table-scrollbar">
+                              <table className="w-full text-xs text-left border-collapse table-fixed">
+                                <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-20 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors shadow-xs">
+                                  <tr>
+                                    <th className="px-2 py-2 font-semibold text-left w-[27%]">
+                                      Jenis Mesin
+                                    </th>
+                                    <th className="px-1 py-2 font-semibold text-center text-emerald-600 dark:text-emerald-400 w-[11%]">
+                                      Tersedia
+                                    </th>
+                                    <th className="px-1 py-2 font-semibold text-center text-slate-600 dark:text-slate-400 w-[12%]">
+                                      <div className="leading-tight">
+                                        Kebutuhan
+                                      </div>
+                                      <div className="text-[9px] font-normal opacity-85 leading-tight truncate">
+                                        ({weeklyComparisonData.lastVersionLabel}
+                                        )
+                                      </div>
+                                    </th>
+                                    <th className="px-1 py-2 font-semibold text-center text-indigo-600 dark:text-indigo-400 w-[12%]">
+                                      <div className="leading-tight">
+                                        Kebutuhan
+                                      </div>
+                                      <div className="text-[9px] font-normal opacity-85 leading-tight truncate">
+                                        (
+                                        {
+                                          weeklyComparisonData.updateVersionLabel
                                         }
-                                        return next;
-                                      });
-                                    };
+                                        )
+                                      </div>
+                                    </th>
+                                    <th className="px-1 py-2 font-semibold text-center text-slate-500 dark:text-slate-400 w-[11%] border-l border-slate-100 dark:border-slate-800">
+                                      <div className="leading-tight">Gap</div>
+                                      <div className="text-[9px] font-normal opacity-85 leading-tight truncate">
+                                        ({weeklyComparisonData.lastVersionLabel}
+                                        )
+                                      </div>
+                                    </th>
+                                    <th className="px-1 py-2 font-semibold text-center text-indigo-600 dark:text-indigo-400 w-[11%]">
+                                      <div className="leading-tight">Gap</div>
+                                      <div className="text-[9px] font-normal opacity-85 leading-tight truncate">
+                                        (
+                                        {
+                                          weeklyComparisonData.updateVersionLabel
+                                        }
+                                        )
+                                      </div>
+                                    </th>
+                                    <th className="px-1 py-2 font-semibold text-center w-[16%] border-l border-slate-100 dark:border-slate-800">
+                                      Status
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
+                                  {selectedWeekMachineData.map((row, i) => {
+                                    let statusText = "OK";
+                                    let statusClass =
+                                      "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30";
 
-                                    let rowBg = "bg-white dark:bg-slate-900";
-                                    let rowBorder =
-                                      "border-l-4 border-l-transparent";
-                                    if (style.hasWorseGap) {
-                                      rowBg = "bg-red-50/60 dark:bg-red-950/35";
-                                      rowBorder = "border-l-4 border-l-red-500";
-                                    } else if (style.hasShortage) {
-                                      rowBg =
-                                        "bg-amber-50/40 dark:bg-amber-950/20";
-                                      rowBorder =
-                                        "border-l-4 border-l-amber-500";
-                                    } else if (style.styleChanged) {
-                                      rowBg =
-                                        "bg-blue-50/30 dark:bg-blue-900/10";
+                                    if (row.isNowShortage) {
+                                      statusText = "Menjadi Shortage";
+                                      statusClass =
+                                        "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
+                                    } else if (row.isWorseShortage) {
+                                      statusText = "Shortage Bertambah";
+                                      statusClass =
+                                        "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
+                                    } else if (
+                                      row.newGap < 0 &&
+                                      row.oldGap < 0
+                                    ) {
+                                      statusText = "Shortage Tetap";
+                                      statusClass =
+                                        "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
+                                    } else if (row.newGap < 0) {
+                                      statusText = "Shortage";
+                                      statusClass =
+                                        "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
                                     }
 
                                     return (
-                                      <React.Fragment key={styleKey}>
-                                        <tr
-                                          className={`${rowBg} ${rowBorder} transition-colors hover:brightness-[0.97] dark:hover:brightness-110 cursor-pointer select-none`}
-                                          onClick={toggleExpand}
+                                      <tr
+                                        key={i}
+                                        className="bg-white dark:bg-slate-900 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50"
+                                      >
+                                        <td className="px-2 py-2 font-medium text-slate-800 dark:text-slate-200 text-[11px] leading-tight break-words">
+                                          {row.machine}
+                                        </td>
+                                        <td className="px-1 py-2 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors text-[11px]">
+                                          {formatDecimal(row.available)}
+                                        </td>
+                                        <td className="px-1 py-2 text-center font-medium text-slate-500 dark:text-slate-400 text-[11px]">
+                                          {formatDecimal(row.lastReq)}
+                                        </td>
+                                        <td className="px-1 py-2 text-center font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+                                          {formatDecimal(row.updateReq)}
+                                        </td>
+                                        <td className="px-1 py-2 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors text-[11px]">
+                                          {formatSignedDecimal(row.oldGap)}
+                                        </td>
+                                        <td
+                                          className={`px-1 py-2 text-center font-bold text-xs ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
                                         >
-                                          {idx === 0 && (
-                                            <td
-                                              className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200 align-top border-r border-slate-200/60 dark:border-slate-700/60"
-                                              rowSpan={totalLineRows}
-                                            >
-                                              <div className="flex items-center gap-1.5 sticky top-2">
-                                                <span
-                                                  className={`text-xs font-bold px-2 py-0.5 rounded-md text-white ${
-                                                    lineData.hasWorseGap
-                                                      ? "bg-red-600 dark:bg-red-700"
-                                                      : lineData.hasShortage
-                                                        ? "bg-amber-600 dark:bg-amber-700"
-                                                        : "bg-slate-800 dark:bg-slate-700"
-                                                  }`}
-                                                >
-                                                  {lineData.line}
-                                                </span>
-                                                {lineData.hasWorseGap && (
-                                                  <span
-                                                    className="flex items-center gap-0.5 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800/50 animate-pulse"
-                                                    title="Line ini memiliki perubahan style yang memperparah kekurangan mesin (Gap memburuk)"
-                                                  >
-                                                    <AlertTriangle className="w-3 h-3" />
-                                                    Gap ↑
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </td>
-                                          )}
-
-                                          {/* Style Before */}
-                                          <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
-                                            <span className="font-medium">
-                                              {style.lastDisplayStyle ||
-                                                style.lastStyle}
-                                            </span>
-                                          </td>
-
-                                          {/* Style After */}
-                                          <td className="px-4 py-3 text-xs max-w-[240px]">
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                              <span
-                                                className={`font-semibold ${
-                                                  style.hasWorseGap
-                                                    ? "text-red-700 dark:text-red-300 font-bold"
-                                                    : style.hasShortage
-                                                      ? "text-amber-700 dark:text-amber-300 font-bold"
-                                                      : "text-slate-800 dark:text-slate-200"
-                                                }`}
-                                              >
-                                                {style.updateDisplayStyle ||
-                                                  style.updateStyle}
-                                              </span>
-                                              {style.hasShortage && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800/70 shadow-sm animate-pulse">
-                                                  <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
-                                                  <span>
-                                                    Shortage (
-                                                    {style.shortageMachines.join(
-                                                      ", ",
-                                                    )}
-                                                    )
-                                                  </span>
-                                                </span>
-                                              )}
-                                              {style.styleChanged &&
-                                                !style.hasShortage && (
-                                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
-                                                    Ganti Style
-                                                  </span>
-                                                )}
-                                            </div>
-                                          </td>
-
-                                          {/* Tanggal */}
-                                          <td
-                                            className={`px-4 py-3 text-center whitespace-nowrap text-xs ${
-                                              style.hasShortage
-                                                ? "text-red-800 dark:text-red-300 font-medium"
-                                                : "text-slate-600 dark:text-slate-300"
-                                            }`}
+                                          {formatSignedDecimal(row.newGap)}
+                                        </td>
+                                        <td className="px-1 py-2 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle">
+                                          <div
+                                            className={`text-[10px] leading-tight mx-auto px-1 py-0.5 rounded break-words font-semibold ${statusClass}`}
                                           >
-                                            {style.startDate ? (
-                                              style.startDate ===
-                                              style.endDate ? (
-                                                format(
-                                                  new Date(
-                                                    style.startDate +
-                                                      "T00:00:00",
-                                                  ),
-                                                  "dd MMM yyyy",
-                                                )
-                                              ) : (
-                                                <span>
-                                                  {format(
-                                                    new Date(
-                                                      style.startDate +
-                                                        "T00:00:00",
-                                                    ),
-                                                    "dd MMM yyyy",
-                                                  )}
-                                                  <span className="text-slate-400 dark:text-slate-500 mx-1 font-normal">
-                                                    s/d
-                                                  </span>
-                                                  {format(
-                                                    new Date(
-                                                      style.endDate +
-                                                        "T00:00:00",
-                                                    ),
-                                                    "dd MMM yyyy",
-                                                  )}
-                                                </span>
-                                              )
-                                            ) : (
-                                              "-"
-                                            )}
-                                          </td>
-
-                                          {/* Kebutuhan Before */}
-                                          <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap text-xs">
-                                            {style.totalLastReq
-                                              ? formatDecimal(
-                                                  style.totalLastReq,
-                                                )
-                                              : "-"}
-                                          </td>
-
-                                          {/* Kebutuhan After */}
-                                          <td
-                                            className={`px-4 py-3 text-center font-bold whitespace-nowrap text-xs ${
-                                              style.hasWorseGap
-                                                ? "text-red-600 dark:text-red-400"
-                                                : style.hasShortage
-                                                  ? "text-amber-600 dark:text-amber-400"
-                                                  : "text-indigo-600 dark:text-indigo-400"
-                                            }`}
-                                          >
-                                            {style.totalUpdateReq
-                                              ? formatDecimal(
-                                                  style.totalUpdateReq,
-                                                )
-                                              : "-"}
-                                          </td>
-
-                                          {/* Detail Button */}
-                                          <td className="px-4 py-3 text-center whitespace-nowrap">
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleExpand();
-                                              }}
-                                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors border shadow-sm ${
-                                                isExpanded
-                                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-indigo-500/20"
-                                                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
-                                              }`}
-                                              title="Lihat detail kebutuhan mesin style ini"
-                                            >
-                                              <span>Mesin</span>
-                                              <ChevronDown
-                                                className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                                  isExpanded ? "rotate-180" : ""
-                                                }`}
-                                              />
-                                            </button>
-                                          </td>
-                                        </tr>
-
-                                        {/* Expanded machine breakdown for THIS style period */}
-                                        {isExpanded && (
-                                          <tr>
-                                            <td
-                                              colSpan={6}
-                                              className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60"
-                                            >
-                                              <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-inner">
-                                                <div className="px-4 py-2 bg-slate-100 dark:bg-slate-700/60 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between">
-                                                  <span>
-                                                    Breakdown Kebutuhan Mesin:{" "}
-                                                    <strong>
-                                                      {style.updateDisplayStyle ||
-                                                        style.updateStyle}
-                                                    </strong>
-                                                  </span>
-                                                </div>
-                                                {style.machineBreakdown
-                                                  .length === 0 ? (
-                                                  <div className="p-3 text-center text-xs text-slate-400">
-                                                    Tidak ada kebutuhan mesin
-                                                    untuk style ini.
-                                                  </div>
-                                                ) : (
-                                                  <table className="w-full text-xs">
-                                                    <thead>
-                                                      <tr className="bg-slate-50 dark:bg-slate-700/40 text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-700/80">
-                                                        <th className="px-4 py-2 text-left font-semibold">
-                                                          Jenis Mesin
-                                                        </th>
-                                                        <th className="px-4 py-2 text-center font-semibold text-emerald-600 dark:text-emerald-400">
-                                                          Tersedia
-                                                        </th>
-                                                        <th className="px-4 py-2 text-center font-semibold text-slate-600 dark:text-slate-400">
-                                                          Kebutuhan Before (
-                                                          {
-                                                            weeklyComparisonData.lastVersionLabel
-                                                          }
-                                                          )
-                                                        </th>
-                                                        <th className="px-4 py-2 text-center font-semibold text-indigo-600 dark:text-indigo-400">
-                                                          Kebutuhan After (
-                                                          {
-                                                            weeklyComparisonData.updateVersionLabel
-                                                          }
-                                                          )
-                                                        </th>
-                                                        <th className="px-4 py-2 text-center font-semibold">
-                                                          Status
-                                                        </th>
-                                                      </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
-                                                      {style.machineBreakdown.map(
-                                                        (m) => {
-                                                          const isShortage =
-                                                            m.available <
-                                                            m.updateReq;
-                                                          const isReqIncreased =
-                                                            m.updateReq >
-                                                            m.lastReq;
-
-                                                          let mRowBg =
-                                                            "hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors";
-                                                          if (isShortage) {
-                                                            mRowBg +=
-                                                              " bg-red-50/60 dark:bg-red-950/25";
-                                                          } else if (
-                                                            isReqIncreased
-                                                          ) {
-                                                            mRowBg +=
-                                                              " bg-amber-50/40 dark:bg-amber-950/20";
-                                                          }
-
-                                                          return (
-                                                            <tr
-                                                              key={m.machine}
-                                                              className={mRowBg}
-                                                            >
-                                                              <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">
-                                                                {m.machine}
-                                                              </td>
-                                                              <td className="px-4 py-2 text-center font-medium text-slate-600 dark:text-slate-300">
-                                                                {formatDecimal(
-                                                                  m.available,
-                                                                )}
-                                                              </td>
-                                                              <td className="px-4 py-2 text-center font-medium text-slate-500 dark:text-slate-400">
-                                                                {formatDecimal(
-                                                                  m.lastReq,
-                                                                )}
-                                                              </td>
-                                                              <td
-                                                                className={`px-4 py-2 text-center font-bold ${
-                                                                  isShortage
-                                                                    ? "text-red-600 dark:text-red-400"
-                                                                    : isReqIncreased
-                                                                      ? "text-indigo-600 dark:text-indigo-400"
-                                                                      : "text-slate-700 dark:text-slate-200"
-                                                                }`}
-                                                              >
-                                                                {formatDecimal(
-                                                                  m.updateReq,
-                                                                )}
-                                                              </td>
-                                                              <td className="px-4 py-2 text-center">
-                                                                {isShortage ? (
-                                                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-                                                                    Shortage (
-                                                                    {formatSignedDecimal(
-                                                                      m.gapAfter,
-                                                                    )}
-                                                                    )
-                                                                  </span>
-                                                                ) : isReqIncreased ? (
-                                                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
-                                                                    Naik (+
-                                                                    {formatDecimal(
-                                                                      m.updateReq -
-                                                                        m.lastReq,
-                                                                    )}
-                                                                    )
-                                                                  </span>
-                                                                ) : (
-                                                                  <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                                                                    Aman
-                                                                  </span>
-                                                                )}
-                                                              </td>
-                                                            </tr>
-                                                          );
-                                                        },
-                                                      )}
-                                                    </tbody>
-                                                  </table>
-                                                )}
-                                              </div>
-                                            </td>
-                                          </tr>
-                                        )}
-                                      </React.Fragment>
+                                            {statusText}
+                                          </div>
+                                        </td>
+                                      </tr>
                                     );
                                   })}
-                                </React.Fragment>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                                </tbody>
+                                <tfoot className="bg-slate-100 dark:bg-slate-800 sticky bottom-0 z-20 font-bold border-t-2 border-slate-200 dark:border-slate-700 shadow-xs">
+                                  <tr>
+                                    <td className="px-2 py-2 text-slate-800 dark:text-slate-200 text-left uppercase tracking-wider text-[11px] truncate">
+                                      Total
+                                    </td>
+                                    <td className="px-1 py-2 text-center text-slate-700 dark:text-slate-300 text-[11px]">
+                                      {formatDecimal(
+                                        selectedWeekMachineData.reduce(
+                                          (acc, r) => acc + r.available,
+                                          0,
+                                        ),
+                                      )}
+                                    </td>
+                                    <td className="px-1 py-2 text-center font-bold text-slate-600 dark:text-slate-300 text-[11px]">
+                                      {formatDecimal(
+                                        selectedWeekMachineData.reduce(
+                                          (acc, r) => acc + r.lastReq,
+                                          0,
+                                        ),
+                                      )}
+                                    </td>
+                                    <td className="px-1 py-2 text-center font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+                                      {formatDecimal(
+                                        selectedWeekMachineData.reduce(
+                                          (acc, r) => acc + r.updateReq,
+                                          0,
+                                        ),
+                                      )}
+                                    </td>
+                                    <td className="px-1 py-2 text-center text-slate-600 dark:text-slate-400 text-[11px] border-l border-slate-100 dark:border-slate-800">
+                                      {formatSignedDecimal(
+                                        selectedWeekMachineData.reduce(
+                                          (acc, r) => acc + r.oldGap,
+                                          0,
+                                        ),
+                                      )}
+                                    </td>
+                                    <td
+                                      className={`px-1 py-2 text-center text-xs ${
+                                        selectedWeekMachineData.reduce(
+                                          (acc, r) => acc + r.newGap,
+                                          0,
+                                        ) < 0
+                                          ? "text-red-600 dark:text-red-500"
+                                          : "text-emerald-600 dark:text-emerald-500"
+                                      }`}
+                                    >
+                                      {formatSignedDecimal(
+                                        selectedWeekMachineData.reduce(
+                                          (acc, r) => acc + r.newGap,
+                                          0,
+                                        ),
+                                      )}
+                                    </td>
+                                    <td className="px-1 py-2 border-l border-slate-100 dark:border-slate-800"></td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 px-1 shrink-0">
+                            <span>
+                              {selectedWeekMachineData.length} jenis mesin
+                              terdata
+                            </span>
+                            <span className="text-slate-400 dark:text-slate-500">
+                              ↕ Scroll tabel ke bawah untuk melihat semua jenis
+                              mesin
+                            </span>
+                          </div>
+                        </div>
+                      ) : detailTab === "mesin" && selectedChartWeek ? (
+                        <div className="flex-1 min-h-0 flex items-center justify-center text-sm text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900">
+                          Tidak ada data mesin pada{" "}
+                          {String(selectedChartWeek).split("-")[0]}.
+                        </div>
+                      ) : null}
                     </div>
-                  )}
-
-                {/* Machine Availability Table (tab: mesin) */}
-                {detailTab === "mesin" &&
-                selectedChartWeek &&
-                selectedWeekMachineData.length > 0 ? (
-                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm overflow-x-auto transition-colors">
-                    <table className="w-full min-w-[760px] text-sm text-left">
-                      <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
-                        <tr>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[160px]">
-                            Jenis Mesin
-                          </th>
-                          <th className="px-4 py-3 font-semibold text-center text-emerald-600 dark:text-emerald-400 whitespace-nowrap min-w-[80px]">
-                            Tersedia
-                          </th>
-                          <th className="px-4 py-3 font-semibold text-center text-slate-600 dark:text-slate-400 min-w-[150px]">
-                            <div>Kebutuhan</div>
-                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
-                              ({weeklyComparisonData.lastVersionLabel})
-                            </div>
-                          </th>
-                          <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 min-w-[150px]">
-                            <div>Kebutuhan</div>
-                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
-                              ({weeklyComparisonData.updateVersionLabel})
-                            </div>
-                          </th>
-                          <th className="px-4 py-3 font-semibold text-center text-slate-500 dark:text-slate-400 min-w-[150px]">
-                            <div>Gap</div>
-                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
-                              ({weeklyComparisonData.lastVersionLabel})
-                            </div>
-                          </th>
-                          <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 min-w-[150px]">
-                            <div>Gap</div>
-                            <div className="text-[10px] font-normal whitespace-nowrap opacity-85 mt-0.5">
-                              ({weeklyComparisonData.updateVersionLabel})
-                            </div>
-                          </th>
-                          <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[110px]">
-                            Status
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
-                        {selectedWeekMachineData.map((row, i) => {
-                          let statusText = "OK";
-                          let statusClass =
-                            "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30";
-
-                          if (row.isNowShortage) {
-                            statusText = "Menjadi Shortage!";
-                            statusClass =
-                              "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
-                          } else if (row.isWorseShortage) {
-                            statusText = "Shortage Bertambah";
-                            statusClass =
-                              "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
-                          } else if (row.newGap < 0 && row.oldGap < 0) {
-                            statusText = "Shortage Tetap";
-                            statusClass =
-                              "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
-                          } else if (row.newGap < 0) {
-                            statusText = "Shortage";
-                            statusClass =
-                              "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
-                          }
-
-                          return (
-                            <tr
-                              key={i}
-                              className="bg-white dark:bg-slate-900 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50"
-                            >
-                              <td className="px-4 py-4 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
-                                {row.machine}
-                              </td>
-                              <td className="px-4 py-4 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors whitespace-nowrap">
-                                {formatDecimal(row.available)}
-                              </td>
-                              <td className="px-4 py-4 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {formatDecimal(row.lastReq)}
-                              </td>
-                              <td className="px-4 py-4 text-center font-bold text-indigo-600 dark:text-indigo-400 text-base whitespace-nowrap">
-                                {formatDecimal(row.updateReq)}
-                              </td>
-                              <td className="px-4 py-4 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors whitespace-nowrap">
-                                {formatSignedDecimal(row.oldGap)}
-                              </td>
-                              <td
-                                className={`px-4 py-4 text-center font-bold text-base whitespace-nowrap ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
-                              >
-                                {formatSignedDecimal(row.newGap)}
-                              </td>
-                              <td className="px-4 py-4 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle whitespace-nowrap">
-                                <div
-                                  className={`text-xs text-center leading-tight mx-auto px-2 py-1 rounded-md whitespace-nowrap ${statusClass}`}
-                                >
-                                  {statusText}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-200 dark:border-slate-700">
-                        <tr>
-                          <td className="px-4 py-4 text-slate-800 dark:text-slate-200 whitespace-nowrap text-left uppercase tracking-wider text-xs">
-                            Total
-                          </td>
-                          <td className="px-4 py-4 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                            {formatDecimal(
-                              selectedWeekMachineData.reduce(
-                                (acc, r) => acc + r.available,
-                                0,
-                              ),
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-center font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                            {formatDecimal(
-                              selectedWeekMachineData.reduce(
-                                (acc, r) => acc + r.lastReq,
-                                0,
-                              ),
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-center font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap text-base">
-                            {formatDecimal(
-                              selectedWeekMachineData.reduce(
-                                (acc, r) => acc + r.updateReq,
-                                0,
-                              ),
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-center text-slate-600 dark:text-slate-400 whitespace-nowrap border-l border-slate-100 dark:border-slate-800">
-                            {formatSignedDecimal(
-                              selectedWeekMachineData.reduce(
-                                (acc, r) => acc + r.oldGap,
-                                0,
-                              ),
-                            )}
-                          </td>
-                          <td
-                            className={`px-4 py-4 text-center whitespace-nowrap text-base ${
-                              selectedWeekMachineData.reduce(
-                                (acc, r) => acc + r.newGap,
-                                0,
-                              ) < 0
-                                ? "text-red-600 dark:text-red-500"
-                                : "text-emerald-600 dark:text-emerald-500"
-                            }`}
-                          >
-                            {formatSignedDecimal(
-                              selectedWeekMachineData.reduce(
-                                (acc, r) => acc + r.newGap,
-                                0,
-                              ),
-                            )}
-                          </td>
-                          <td className="px-4 py-4 border-l border-slate-100 dark:border-slate-800"></td>
-                        </tr>
-                      </tfoot>
-                    </table>
                   </div>
-                ) : detailTab === "mesin" && selectedChartWeek ? (
-                  <div className="text-center py-8 text-sm text-slate-400 dark:text-slate-500">
-                    Tidak ada data mesin pada{" "}
-                    {String(selectedChartWeek).split("-")[0]}.
-                  </div>
-                ) : null}
+                )}
               </div>
             )}
           </div>

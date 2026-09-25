@@ -172,7 +172,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
                 {criticalCount}
               </div>
               <div className="text-[10px] font-semibold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider">
-                Critical (≤3 hari)
+                Masa Sewa/Trial ≤3 hari
               </div>
             </div>
           </div>
@@ -186,7 +186,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
                 {warningCount}
               </div>
               <div className="text-[10px] font-semibold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">
-                Warning (4-7 hari)
+                Masa Sewa/Trial Sisa 4-7 hari
               </div>
             </div>
           </div>
@@ -200,7 +200,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
                 {expiredCount}
               </div>
               <div className="text-[10px] font-semibold text-slate-500/70 dark:text-slate-400/70 uppercase tracking-wider">
-                Baru Expired (3 hari lalu)
+                Masa Sewa/Trial Sudah Selesai (3 hari lalu)
               </div>
             </div>
           </div>
@@ -252,7 +252,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
       {/* Total rental/trial machines info */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5 transition-colors">
         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-          Info Keseluruhan Mesin Sewa & Trial
+          Informasi Keseluruhan Mesin Sewa & Trial
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
           <div className="bg-slate-50 dark:bg-slate-800/30 rounded-lg p-3 text-center">
@@ -292,7 +292,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
               {rentalTrialRecords.filter((r) => !r.tglSelesai).length}
             </div>
             <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider">
-              Tanpa Batas Waktu
+              Belum Ada Batas Waktu
             </div>
           </div>
         </div>
