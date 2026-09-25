@@ -9,7 +9,14 @@ import {
   Wrench,
 } from "lucide-react";
 
-export type TabValue = "preview" | "summary" | "detail" | "history" | "chart" | "downtime" | "alerts";
+export type TabValue =
+  | "preview"
+  | "summary"
+  | "detail"
+  | "history"
+  | "chart"
+  | "downtime"
+  | "alerts";
 
 interface SidebarProps {
   activeTab: TabValue;
@@ -40,17 +47,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: "detail",
-      label: "Detail",
+      label: "Detail Matriks",
       icon: <TableProperties className="w-5 h-5" />,
     },
     {
       id: "history",
-      label: "History PPIC",
+      label: "Plan History",
       icon: <Clock className="w-5 h-5" />,
     },
     {
       id: "chart",
-      label: "Analytics",
+      label: "Analytics & Chart",
       icon: <BarChart2 className="w-5 h-5" />,
     },
     {
@@ -60,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: "alerts",
-      label: "Rental Alerts",
+      label: "Sewa & Trial Alerts",
       icon: <Bell className="w-5 h-5" />,
       badge: alertCount,
     },

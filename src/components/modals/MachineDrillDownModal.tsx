@@ -11,6 +11,7 @@ import {
   ArrowDown
 } from "lucide-react";
 import { DrillDownData } from "../../types/mrp";
+import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 
 interface MachineDrillDownModalProps {
   data: DrillDownData | null;
@@ -97,7 +98,7 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
                 Total Required
               </span>
               <div className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1">
-                {data.totalRequired}
+                {formatDecimal(data.totalRequired)}
               </div>
               <span className="text-[10px] text-slate-400 dark:text-slate-500">units needed</span>
             </div>
@@ -106,7 +107,7 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
                 Total Available
               </span>
               <div className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1">
-                {data.totalAvailable}
+                {formatDecimal(data.totalAvailable)}
               </div>
               <span className="text-[10px] text-slate-400 dark:text-slate-500">
                 factory inventory
@@ -121,7 +122,7 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
                   data.gap < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"
                 }`}
               >
-                {data.gap > 0 ? `+${data.gap}` : data.gap}
+                {formatSignedDecimal(data.gap)}
               </div>
               <span className="text-[10px] text-slate-400 dark:text-slate-500">
                 {data.gap < 0 ? "deficit" : "surplus"}
@@ -132,7 +133,7 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
                 Utilization
               </span>
               <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
-                {data.utilization}%
+                {formatDecimal(data.utilization)}%
               </div>
               <span className="text-[10px] text-slate-400 dark:text-slate-500">capacity load</span>
             </div>
@@ -255,7 +256,7 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
                           </div>
                         </td>
                         <td className="py-3 px-4 text-right font-bold text-slate-900 dark:text-slate-100 text-base">
-                          {detail.required}
+                          {formatDecimal(detail.required)}
                         </td>
                       </tr>
                     ))}

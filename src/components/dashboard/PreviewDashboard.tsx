@@ -33,6 +33,7 @@ import {
   filterDowntimeRecords,
   getDowntimeKPIs,
 } from "../../utils/downtimeCalculations";
+import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 
 /* ------------------------------------------------------------------ */
 /*  Helper: Current ISO-week boundaries (Senin – Minggu)              */
@@ -99,6 +100,61 @@ const formatDateShort = (dateStr: string) => {
     return `${dayNames[d.getDay()]}, ${parseInt(parts[2])}/${parseInt(parts[1])}`;
   }
   return dateStr;
+};
+
+/** Format date range like "21 – 26 Sep" or "28 Sep – 3 Okt" */
+const formatWeekDateRange = (startDateStr: string, endDateStr: string) => {
+  if (!startDateStr || !endDateStr) return "";
+  const d1 = new Date(startDateStr + "T00:00:00");
+  const d2 = new Date(endDateStr + "T00:00:00");
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mei",
+    "Jun",
+    "Jul",
+    "Agu",
+    "Sep",
+    "Okt",
+    "Nov",
+    "Des",
+  ];
+  if (d1.getMonth() === d2.getMonth()) {
+    return `${d1.getDate()} – ${d2.getDate()} ${months[d2.getMonth()]}`;
+  }
+  return `${d1.getDate()} ${months[d1.getMonth()]} – ${d2.getDate()} ${months[d2.getMonth()]}`;
+};
+
+const getWeekBoundaries = (dateStr: string) => {
+  const d = new Date(dateStr + "T00:00:00");
+  const dow = d.getDay(); // 0=Sun
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((dow + 6) % 7));
+  const saturday = new Date(monday);
+  saturday.setDate(monday.getDate() + 5);
+  const fmt = (dt: Date) => {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const day = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  return { startDate: fmt(monday), endDate: fmt(saturday) };
+};
+
+const getIsoWeekInfo = (dateStr: string) => {
+  const d = new Date(dateStr + "T00:00:00");
+  const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const isoDay = (tmp.getDay() + 6) % 7;
+  tmp.setDate(tmp.getDate() - isoDay + 3);
+  const isoYear = tmp.getFullYear();
+  const firstThu = new Date(isoYear, 0, 4);
+  const off = (firstThu.getDay() + 6) % 7;
+  firstThu.setDate(firstThu.getDate() - off + 3);
+  const weekNum =
+    1 + Math.round((tmp.getTime() - firstThu.getTime()) / (7 * 86400000));
+  return { weekNum, weekLabel: `W${weekNum}`, year: isoYear };
 };
 
 /* ------------------------------------------------------------------ */
@@ -265,40 +321,124 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
     };
   }, [cleanPlans, currentWeek.todayStr]);
 
-  // 3. Snapshot History — ringkasan per LINE (bukan per hari)
+  // 3. Snapshot History — ringkasan perubahan planning per week
   const historyStats = useMemo(() => {
     if (snapshots.length === 0) {
       return {
         hasData: false,
         latestVersion: "-",
         lastVersion: "-",
-        styleChangedLines: 0,
-        machineChangedLines: 0,
+        currentWeekPlanningChanges: 0,
+        currentWeekMachineChanges: 0,
+        currentWeekAffectedLinesCount: 0,
+        currentWeekAffectedLinesList: [] as string[],
+        totalChangesAll: 0,
+        totalLinesAll: 0,
         totalRows: 0,
+        upcomingWeeks: [] as {
+          weekLabel: string;
+          weekNum: number;
+          startDate: string;
+          endDate: string;
+          planningChanges: number;
+          machineChanges: number;
+          affectedLinesCount: number;
+          affectedLinesList: string[];
+          dateRangeShort: string;
+          isCurrent: boolean;
+        }[],
       };
     }
 
     const latest = snapshots[0];
 
-    // Hitung LINE UNIK yang berubah, bukan baris per hari.
-    // Misal G01 berubah di 6 hari → tetap dihitung 1 line berubah.
-    const linesWithStyleChange = new Set(
-      snapshots.filter((s) => s.isPlanningStyleChanged).map((s) => s.line),
+    // Filter snapshot untuk minggu ini dan ke depan (exclude Minggu)
+    const validSnapshots = snapshots.filter(
+      (s) =>
+        !isSunday(s.planningDate) && s.planningDate >= currentWeek.startDate,
     );
-    const linesWithMachineChange = new Set(
-      snapshots.filter((s) => s.isMachineStyleChanged).map((s) => s.line),
-    );
+
+    // Grouping per minggu
+    const weekMap = new Map<
+      string,
+      {
+        weekLabel: string;
+        weekNum: number;
+        startDate: string;
+        endDate: string;
+        planningChanges: number;
+        machineChanges: number;
+        affectedLines: Set<string>;
+      }
+    >();
+
+    validSnapshots.forEach((s) => {
+      const { weekNum, weekLabel } = getIsoWeekInfo(s.planningDate);
+      if (!weekMap.has(weekLabel)) {
+        const { startDate, endDate } = getWeekBoundaries(s.planningDate);
+        weekMap.set(weekLabel, {
+          weekLabel,
+          weekNum,
+          startDate,
+          endDate,
+          planningChanges: 0,
+          machineChanges: 0,
+          affectedLines: new Set(),
+        });
+      }
+      const entry = weekMap.get(weekLabel)!;
+      if (s.isPlanningStyleChanged) {
+        entry.planningChanges++;
+        entry.affectedLines.add(s.line);
+      }
+      if (s.isMachineStyleChanged) {
+        entry.machineChanges++;
+      }
+    });
+
+    // Urutkan minggu berdasarkan startDate
+    const sortedWeeks = Array.from(weekMap.values())
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))
+      .map((w) => ({
+        ...w,
+        affectedLinesCount: w.affectedLines.size,
+        affectedLinesList: Array.from(w.affectedLines).sort(),
+        dateRangeShort: formatWeekDateRange(w.startDate, w.endDate),
+        isCurrent: w.weekLabel === currentWeek.weekLabel,
+      }));
+
+    // Data spesifik week berjalan
+    const currentWeekData = sortedWeeks.find((w) => w.isCurrent) || {
+      planningChanges: 0,
+      machineChanges: 0,
+      affectedLinesCount: 0,
+      affectedLinesList: [] as string[],
+    };
+
+    // Total seluruh perubahan di masa datang
+    const allAffectedLines = new Set<string>();
+    let totalChangesAll = 0;
+    validSnapshots.forEach((s) => {
+      if (s.isPlanningStyleChanged) {
+        totalChangesAll++;
+        allAffectedLines.add(s.line);
+      }
+    });
 
     return {
       hasData: true,
       latestVersion: latest.updateVersion || "Update",
       lastVersion: latest.lastVersion || "Previous",
-      snapshotDate: latest.updateSnapshotDate || latest.planningDate,
-      styleChangedLines: linesWithStyleChange.size,
-      machineChangedLines: linesWithMachineChange.size,
+      currentWeekPlanningChanges: currentWeekData.planningChanges,
+      currentWeekMachineChanges: currentWeekData.machineChanges,
+      currentWeekAffectedLinesCount: currentWeekData.affectedLinesCount,
+      currentWeekAffectedLinesList: currentWeekData.affectedLinesList,
+      totalChangesAll,
+      totalLinesAll: allAffectedLines.size,
       totalRows: snapshots.length,
+      upcomingWeeks: sortedWeeks,
     };
-  }, [snapshots]);
+  }, [snapshots, currentWeek]);
 
   // 4. Fleet Age & Analytics (usia mesin = data inventory statis; utilisasi = current week)
   const analyticsStats = useMemo(() => {
@@ -379,13 +519,14 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
               <span>Executive Overview &amp; Quick Navigation</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              Dashboard Preview Hub
+              Dashboard Preview
             </h1>
             <p className="mt-1.5 text-sm sm:text-base text-slate-300 max-w-2xl">
-              Rangkuman status kesiapan mesin jahit, lini produksi, perbandingan
-              snapshot, utilisasi pabrik, downtime mesin, dan peringatan sewa
-              untuk <strong>minggu berjalan</strong>. Klik kartu untuk masuk ke
-              detail masing-masing tab.
+              Dashboard ini menyajikan informasi kebutuhan dan ketersediaan
+              mesin berdasarkan planning style dari PPIC, perubahan planning
+              dari minggu sebelumnya beserta dampaknya terhadap kebutuhan mesin
+              dan layout, serta informasi inventory mesin dan downtime mesin
+              harian.
             </p>
           </div>
 
@@ -433,7 +574,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                     Summary
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Kebutuhan mesin pada {currentWeek.weekLabel}
+                    Ringkasan kebutuhan mesin
                   </span>
                 </div>
               </div>
@@ -446,10 +587,10 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <span className="text-[11px] text-slate-400 font-medium">
-                  Jumlah Mesin Tersedia
+                  Jumlah Mesin Tersedia ({currentWeek.weekLabel})
                 </span>
                 <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                  {capacityStats.totalCapacity}{" "}
+                  {formatDecimal(capacityStats.totalCapacity)}{" "}
                   <span className="text-xs font-normal text-slate-400">
                     unit
                   </span>
@@ -457,10 +598,10 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <span className="text-[11px] text-slate-400 font-medium">
-                  Total Kebutuhan Mesin
+                  Total Kebutuhan Mesin ({currentWeek.weekLabel})
                 </span>
                 <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                  {capacityStats.totalRequired}{" "}
+                  {formatDecimal(capacityStats.totalRequired)}{" "}
                   <span className="text-xs font-normal text-slate-400">
                     unit
                   </span>
@@ -472,7 +613,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             <div className="space-y-1.5 mb-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500 dark:text-slate-400 font-medium">
-                  Status Shortage:
+                  Status Shortage ({currentWeek.weekLabel}):
                 </span>
                 <span
                   className={`font-bold flex items-center ${
@@ -502,7 +643,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                       key={m.machine}
                       className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/50"
                     >
-                      {m.machine} ({m.gap})
+                      {m.machine} ({formatSignedDecimal(m.gap)})
                     </span>
                   ))}
                 </div>
@@ -512,7 +653,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
 
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-1 transition-transform">
-            <span>Buka Tabel Summary</span>
+            <span>Buka Tab Summary</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>
@@ -537,8 +678,6 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium block leading-tight">
                     Detail kebutuhan mesin per line
-                    <br />
-                    pada {currentWeek.weekLabel}
                   </span>
                 </div>
               </div>
@@ -551,7 +690,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <span className="text-[11px] text-slate-400 font-medium">
-                  Total Planning
+                  Total Planning ({currentWeek.weekLabel})
                 </span>
                 <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
                   {detailStats.totalPlans}{" "}
@@ -562,7 +701,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <span className="text-[11px] text-slate-400 font-medium">
-                  Total Planning Style
+                  Total Planning Style ({currentWeek.weekLabel})
                 </span>
                 <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                   {detailStats.totalStyles}{" "}
@@ -611,7 +750,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
 
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform">
-            <span>Buka Detail Matriks</span>
+            <span>Buka Tab Detail Matriks</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>
@@ -674,17 +813,17 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
                 <span>Total Ketersediaan Mesin ({currentWeek.weekLabel}):</span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {capacityStats.totalCapacity} unit
+                  {formatDecimal(capacityStats.totalCapacity)} unit
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
                 <span>
-                  Mesin dengan jumlah shortage terbanyak pada (
-                  {currentWeek.weekLabel}):
+                  Mesin dengan jumlah shortage terbanyak pada{" "}
+                  {currentWeek.weekLabel}:
                 </span>
                 <span className="font-semibold text-red-500">
                   {capacityStats.topShortages[0]
-                    ? `${capacityStats.topShortages[0].machine} (${capacityStats.topShortages[0].gap})`
+                    ? `${capacityStats.topShortages[0].machine} (${formatSignedDecimal(capacityStats.topShortages[0].gap)})`
                     : "Tidak ada"}
                 </span>
               </div>
@@ -693,7 +832,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
 
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-amber-600 dark:text-amber-400 group-hover:translate-x-1 transition-transform">
-            <span>Buka Analytics &amp; Chart</span>
+            <span>Buka Tab Analytics &amp; Chart</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>
@@ -714,56 +853,96 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">
-                    History Snapshot
+                    History PPIC
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab History PPIC
+                    Dampak Perubahan planning PPIC dari{" "}
+                    {historyStats.lastVersion} ke {historyStats.latestVersion}{" "}
+                    terhadap kebutuhan mesin
                   </span>
                 </div>
               </div>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                {historyStats.latestVersion}
-              </span>
             </div>
 
-            {/* Metrics Snippet */}
-            <div className="grid grid-cols-2 gap-2.5 mb-4">
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">
-                  Line Ubah Planning
-                </span>
-                <div className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
-                  {historyStats.styleChangedLines}{" "}
-                  <span className="text-xs font-normal text-slate-400">
-                    line
+            {/* Poin-poin Perubahan Week Berjalan */}
+            <div className="space-y-2 mb-4 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex items-center justify-between gap-2">
+                <span>Total Perubahan Planning ({currentWeek.weekLabel}):</span>
+                <span className="shrink-0 whitespace-nowrap font-semibold text-slate-700 dark:text-slate-200">
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">
+                    {historyStats.currentWeekPlanningChanges} perubahan
+                  </span>{" "}
+                  <span className="text-[11px] text-slate-400 font-normal">
+                    ({historyStats.currentWeekAffectedLinesCount} line)
                   </span>
-                </div>
+                </span>
               </div>
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400 font-medium">
-                  Line Ubah Style Mesin
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  Berdampak thd Kebutuhan Mesin ({currentWeek.weekLabel}):
                 </span>
-                <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
-                  {historyStats.machineChangedLines}{" "}
-                  <span className="text-xs font-normal text-slate-400">
-                    line
-                  </span>
-                </div>
+                <span className="shrink-0 whitespace-nowrap font-bold text-indigo-600 dark:text-indigo-400">
+                  {historyStats.currentWeekMachineChanges} perubahan
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Versi Planning Dibandingkan:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Plan {historyStats.lastVersion} ➔ Plan{" "}
+                  {historyStats.latestVersion}
+                </span>
+              </div>
+            </div>
+
+            {/* Ringkasan Per Week */}
+            <div className="space-y-1.5 mb-4">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                Ringkasan Per Week:
+              </span>
+              <div className="space-y-1">
+                {historyStats.upcomingWeeks.slice(0, 3).map((w) => (
+                  <div
+                    key={w.weekLabel}
+                    className={`flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg border transition-colors ${
+                      w.isCurrent
+                        ? "bg-cyan-50/80 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800/60"
+                        : "bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800/50"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span
+                        className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                          w.isCurrent
+                            ? "bg-cyan-600 text-white"
+                            : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                        }`}
+                      >
+                        {w.weekLabel}
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400 text-[11px]">
+                        {w.dateRangeShort}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="font-bold text-cyan-600 dark:text-cyan-400">
+                        {w.planningChanges} perubahan
+                      </span>
+                      <span className="text-slate-400 dark:text-slate-500 text-[10px]">
+                        ({w.affectedLinesCount} line)
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
             {/* Comparison info */}
             <div className="space-y-1 mb-4 text-xs text-slate-500 dark:text-slate-400">
               <div className="flex items-center justify-between">
-                <span>Versi Dibandingkan:</span>
+                <span>Total Perubahan Planning (Seluruh Week):</span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {historyStats.lastVersion} ➔ {historyStats.latestVersion}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Total Snapshot Terdata:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                  {historyStats.totalRows} baris
+                  {historyStats.totalChangesAll} perubahan (
+                  {historyStats.totalLinesAll} line)
                 </span>
               </div>
             </div>
@@ -771,7 +950,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
 
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-cyan-600 dark:text-cyan-400 group-hover:translate-x-1 transition-transform">
-            <span>Buka History Snapshot</span>
+            <span>Buka Tab Plan History</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>
@@ -792,19 +971,20 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
-                    Rental &amp; Trial Alerts
+                    Mesin Sewa &amp; Trial Alerts
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab Rental · {currentWeek.weekLabel}
+                    Alert untuk mesin sewa/trial yang
+                    <br /> masa berlakunya akan berakhir
                   </span>
                 </div>
               </div>
               {alertStats.criticalCount > 0 ? (
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse">
-                  {alertStats.criticalCount} Kritis
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500 text-white animate-pulse shrink-0 whitespace-nowrap">
+                  {alertStats.criticalCount} Segera Berakhir
                 </span>
               ) : (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0 whitespace-nowrap">
                   {alertStats.totalAlerts} Alert
                 </span>
               )}
@@ -814,7 +994,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-red-50/60 dark:bg-red-900/20 border border-red-100 dark:border-red-800/40">
                 <span className="text-[11px] text-red-500 font-medium">
-                  Kritis (≤ 3 Hari)
+                  Masa sewa/trial ≤ 3 Hari
                 </span>
                 <div className="text-lg font-bold text-red-600 dark:text-red-400">
                   {alertStats.criticalCount}{" "}
@@ -823,7 +1003,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
               </div>
               <div className="p-2.5 rounded-xl bg-amber-50/60 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/40">
                 <span className="text-[11px] text-amber-500 font-medium">
-                  Perhatian (4-7 Hari)
+                  Masa sewa/trial sisa 4-7 Hari
                 </span>
                 <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
                   {alertStats.warningCount}{" "}
@@ -875,7 +1055,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
 
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-red-600 dark:text-red-400 group-hover:translate-x-1 transition-transform">
-            <span>Buka Rental Alerts</span>
+            <span>Buka Tab Sewa & Trial Alerts</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>
@@ -899,12 +1079,12 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                     Downtime Mesin
                   </h3>
                   <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                    Tab Downtime · {currentWeek.weekLabel}
+                    Ringkasan kejadian downtime mesin
                   </span>
                 </div>
               </div>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                {downtimeStats.totalIncidents.toLocaleString("id-ID")} Kejadian
+                {formatDecimal(downtimeStats.totalIncidents)} Kejadian
               </span>
             </div>
 
@@ -912,31 +1092,24 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             <div className="grid grid-cols-2 gap-2.5 mb-4">
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <span className="text-[11px] text-slate-400 font-medium">
-                  Total Downtime
+                  Total Downtime ({currentWeek.weekLabel})
                 </span>
                 <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                  {Math.round(downtimeStats.totalDowntimeHours).toLocaleString(
-                    "id-ID",
-                  )}{" "}
+                  {formatDecimal(downtimeStats.totalDowntimeHours)}{" "}
                   <span className="text-xs font-normal text-slate-400">
                     jam
                   </span>
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {Math.round(
-                    downtimeStats.totalDowntimeMinutes,
-                  ).toLocaleString("id-ID")}{" "}
-                  menit
+                  {formatDecimal(downtimeStats.totalDowntimeMinutes)} menit
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
                 <span className="text-[11px] text-slate-400 font-medium">
-                  Rata-rata / Kejadian
+                  Rata-rata Downtime ({currentWeek.weekLabel})
                 </span>
                 <div className="text-lg font-bold text-orange-600 dark:text-orange-400">
-                  {Math.round(downtimeStats.avgDurationMinutes).toLocaleString(
-                    "id-ID",
-                  )}{" "}
+                  {formatDecimal(downtimeStats.avgDurationMinutes)}{" "}
                   <span className="text-xs font-normal text-slate-400">
                     menit
                   </span>
@@ -947,23 +1120,19 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
             {/* Top Downtime Highlight */}
             <div className="space-y-1.5 mb-4 text-xs">
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span>Downtime Terlama:</span>
+                <span>Downtime Terlama ({currentWeek.weekLabel}):</span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
                   {downtimeStats.topMachineType} (
-                  {Math.round(
-                    downtimeStats.topMachineTypeMinutes,
-                  ).toLocaleString("id-ID")}{" "}
-                  mnt)
+                  {formatDecimal(downtimeStats.topMachineTypeMinutes)} mnt)
                 </span>
               </div>
               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                <span>Line Tertinggi:</span>
+                <span>
+                  Line dengan Downtime Terlama ({currentWeek.weekLabel}):
+                </span>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">
                   {downtimeStats.topLine} (
-                  {Math.round(downtimeStats.topLineMinutes).toLocaleString(
-                    "id-ID",
-                  )}{" "}
-                  mnt)
+                  {formatDecimal(downtimeStats.topLineMinutes)} mnt)
                 </span>
               </div>
             </div>
@@ -971,7 +1140,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
 
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-orange-600 dark:text-orange-400 group-hover:translate-x-1 transition-transform">
-            <span>Buka Downtime Mesin</span>
+            <span>Buka Tab Downtime Mesin</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>

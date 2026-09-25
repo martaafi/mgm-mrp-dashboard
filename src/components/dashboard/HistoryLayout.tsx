@@ -1,5 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { format, getISOWeek, getYear, startOfISOWeek, subWeeks } from "date-fns";
+import {
+  format,
+  getISOWeek,
+  getYear,
+  startOfISOWeek,
+  subWeeks,
+} from "date-fns";
 import {
   AlertTriangle,
   Clock,
@@ -36,7 +42,10 @@ import {
   calculateMachineRequirements,
   getAdjustedAvailabilityForDateRange,
   isSunday,
+  getCurrentWeekRange,
 } from "../../utils/mrpCalculations";
+import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
+import { DateRangePicker } from "../filters/DateRangePicker";
 
 interface HistoryLayoutProps {
   snapshots: SnapshotRecord[];
@@ -73,6 +82,21 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     return `${year}-${month}-${day}`;
   };
 
+  // Helper: Format snapshot version string (e.g. "W38-2026", "W38", "38") into "Week 38"
+  const formatPlanWeekName = (version?: string, fallback = ""): string => {
+    const v = (version || fallback || "").trim();
+    if (!v) return "";
+    const wMatch = v.match(/(?:week|w)\s*(\d+)/i);
+    if (wMatch) {
+      return `Week ${wMatch[1]}`;
+    }
+    const numMatch = v.match(/^(\d{1,2})$/);
+    if (numMatch) {
+      return `Week ${numMatch[1]}`;
+    }
+    return v;
+  };
+
   // Helper: get the start date (Monday) of 4 weeks prior to the current week
   const getHistoryStartStr = () => {
     const today = new Date();
@@ -95,29 +119,70 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     });
   }, [snapshots]);
 
-  // Sort snapshots by priority: Amber (machine style changed) > Blue (planning only), then by nearest date
-  const changedSnapshots = useMemo(() => {
-    return [...rawChangedSnapshots].sort((a, b) => {
-      const aAmber = a.isMachineStyleChanged ? 1 : 2;
-      const bAmber = b.isMachineStyleChanged ? 1 : 2;
+  // Date filter for Detail Perubahan Planning subtab (Default: Current Running Week)
+  const [detailDateFilter, setDetailDateFilter] = useState<{
+    startDate: string;
+    endDate: string;
+  }>(() => {
+    const week = getCurrentWeekRange();
+    return {
+      startDate: week.startDate,
+      endDate: week.endDate,
+    };
+  });
 
-      if (aAmber !== bAmber) return aAmber - bAmber;
+  // Filter snapshots for the Detail subtab by date filter (if set) and sort by priority
+  const detailChangedSnapshots = useMemo(() => {
+    return snapshots
+      .filter((s) => {
+        if (isSunday(s.planningDate)) return false;
+        if (!s.isMachineStyleChanged && !s.isPlanningStyleChanged) return false;
+        if (
+          detailDateFilter.startDate &&
+          s.planningDate < detailDateFilter.startDate
+        )
+          return false;
+        if (
+          detailDateFilter.endDate &&
+          s.planningDate > detailDateFilter.endDate
+        )
+          return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const aAmber = a.isMachineStyleChanged ? 1 : 2;
+        const bAmber = b.isMachineStyleChanged ? 1 : 2;
 
-      return (
-        new Date(a.planningDate).getTime() - new Date(b.planningDate).getTime()
-      );
-    });
-  }, [rawChangedSnapshots]);
+        if (aAmber !== bAmber) return aAmber - bAmber;
+
+        return (
+          new Date(a.planningDate).getTime() -
+          new Date(b.planningDate).getTime()
+        );
+      });
+  }, [snapshots, detailDateFilter]);
 
   const [selectedSnapshot, setSelectedSnapshot] =
     useState<SnapshotRecord | null>(null);
 
-  // Set initial selected snapshot after changedSnapshots is ready
+  // Auto-select first snapshot when detailChangedSnapshots updates
   React.useEffect(() => {
-    if (changedSnapshots.length > 0 && !selectedSnapshot) {
-      setSelectedSnapshot(changedSnapshots[0]);
+    if (detailChangedSnapshots.length > 0) {
+      if (
+        !selectedSnapshot ||
+        !detailChangedSnapshots.some(
+          (s) =>
+            s === selectedSnapshot ||
+            (s.line === selectedSnapshot.line &&
+              s.planningDate === selectedSnapshot.planningDate),
+        )
+      ) {
+        setSelectedSnapshot(detailChangedSnapshots[0]);
+      }
+    } else {
+      setSelectedSnapshot(null);
     }
-  }, [changedSnapshots, selectedSnapshot]);
+  }, [detailChangedSnapshots]);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [activeSubTab, setActiveSubTab] = useState<"makro" | "detail">("makro");
@@ -125,12 +190,12 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
   const itemsPerPage = 50;
 
-  const totalPages = Math.ceil(changedSnapshots.length / itemsPerPage);
+  const totalPages = Math.ceil(detailChangedSnapshots.length / itemsPerPage);
 
   const paginatedSnapshots = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
-    return changedSnapshots.slice(startIndex, startIndex + itemsPerPage);
-  }, [changedSnapshots, currentPage]);
+    return detailChangedSnapshots.slice(startIndex, startIndex + itemsPerPage);
+  }, [detailChangedSnapshots, currentPage]);
 
   // Calculate machine impact for selected snapshot item
   const impactAnalysis = useMemo(() => {
@@ -201,10 +266,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       selectedSnapshot?.planningDate ||
       plans[plans.length - 1]?.date ||
       historyStartStr;
-    const minDate =
-      historyStartStr < targetDate ? historyStartStr : targetDate;
-    const maxDate =
-      historyStartStr > targetDate ? historyStartStr : targetDate;
+    const minDate = historyStartStr < targetDate ? historyStartStr : targetDate;
+    const maxDate = historyStartStr > targetDate ? historyStartStr : targetDate;
 
     // Filter plans from minDate to maxDate
     const impactPlans = plans.filter(
@@ -223,9 +286,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     // Before scenario (Hypothetical): Revert changed machine styles
     let totalStyleChanges = 0;
     const changedSnapshotsInRange = rawChangedSnapshots.filter(
-      (s) =>
-        s.planningDate >= minDate &&
-        s.planningDate <= maxDate,
+      (s) => s.planningDate >= minDate && s.planningDate <= maxDate,
     );
 
     const hypotheticalPlans = impactPlans.map((p) => {
@@ -382,9 +443,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
     // Use snapshots from 4 weeks prior to current week onwards (exclude Sundays)
     const futureSnapshots = snapshots.filter(
-      (s) =>
-        s.planningDate >= historyStartStr &&
-        !isSunday(s.planningDate),
+      (s) => s.planningDate >= historyStartStr && !isSunday(s.planningDate),
     );
     if (futureSnapshots.length === 0) {
       return {
@@ -780,9 +839,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     const machineMaxUpdate: Record<string, number> = {};
 
     weekDates.forEach((date) => {
-      const daySnapshots = weekSnapshots.filter(
-        (s) => s.planningDate === date,
-      );
+      const daySnapshots = weekSnapshots.filter((s) => s.planningDate === date);
       const machineDayLast: Record<string, number> = {};
       const machineDayUpdate: Record<string, number> = {};
 
@@ -970,8 +1027,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       // Exclude line if all snapshots are NO PLANNING
       const allNoPlan = snaps.every(
         (s) =>
-          (!s.lastMachineStyle || s.lastMachineStyle.toUpperCase().includes("NO PLAN")) &&
-          (!s.updateMachineStyle || s.updateMachineStyle.toUpperCase().includes("NO PLAN"))
+          (!s.lastMachineStyle ||
+            s.lastMachineStyle.toUpperCase().includes("NO PLAN")) &&
+          (!s.updateMachineStyle ||
+            s.updateMachineStyle.toUpperCase().includes("NO PLAN")),
       );
       if (allNoPlan) return;
 
@@ -1021,7 +1080,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
               r.style === lastStyle &&
               (isACC
                 ? (r.kebutuhanAccessories || 0) > 0
-                : r.kebutuhanTotal > 0)
+                : r.kebutuhanTotal > 0),
           );
           lastReqs.forEach((r) => {
             const count = isACC
@@ -1037,7 +1096,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
               r.style === updateStyle &&
               (isACC
                 ? (r.kebutuhanAccessories || 0) > 0
-                : r.kebutuhanTotal > 0)
+                : r.kebutuhanTotal > 0),
           );
           updateReqs.forEach((r) => {
             const count = isACC
@@ -1050,11 +1109,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
         const totalLastReq = Object.values(lastReqMap).reduce(
           (a, b) => a + b,
-          0
+          0,
         );
         const totalUpdateReq = Object.values(updateReqMap).reduce(
           (a, b) => a + b,
-          0
+          0,
         );
 
         const allMachines = new Set([
@@ -1068,7 +1127,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
             const updateReq = updateReqMap[machine] || 0;
             const available =
               weeklyAvailabilities.find(
-                (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase()
+                (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
               )?.jumlahMesin || 0;
 
             const gapBefore = available - lastReq;
@@ -1099,10 +1158,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
         const hasShortage = machineBreakdown.some((m) => m.isShortageAfter);
         const hasNewShortage = machineBreakdown.some((m) => m.isNewShortage);
-        const hasWorseShortage = machineBreakdown.some((m) => m.isWorseShortage);
+        const hasWorseShortage = machineBreakdown.some(
+          (m) => m.isWorseShortage,
+        );
         const styleChanged = lastStyle !== updateStyle;
         const hasWorseGap =
-          styleChanged && machineBreakdown.some((m) => m.gapAfter < m.gapBefore);
+          styleChanged &&
+          machineBreakdown.some((m) => m.gapAfter < m.gapBefore);
         const shortageMachines = machineBreakdown
           .filter((m) => m.isShortageAfter)
           .map((m) => m.machine);
@@ -1135,7 +1197,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       const lineHasNewShortage = styles.some((s) => s.hasNewShortage);
       const totalShortageMachines = styles.reduce(
         (acc, s) => acc + s.shortageMachines.length,
-        0
+        0,
       );
 
       linesResult.push({
@@ -1151,7 +1213,8 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     // Sort lines: worse gap > new shortage > existing shortage > shortage machine count > line name
     linesResult.sort((a, b) => {
       if (a.hasWorseGap !== b.hasWorseGap) return a.hasWorseGap ? -1 : 1;
-      if (a.hasNewShortage !== b.hasNewShortage) return a.hasNewShortage ? -1 : 1;
+      if (a.hasNewShortage !== b.hasNewShortage)
+        return a.hasNewShortage ? -1 : 1;
       if (a.hasShortage !== b.hasShortage) return a.hasShortage ? -1 : 1;
       if (a.totalShortageMachines !== b.totalShortageMachines) {
         return b.totalShortageMachines - a.totalShortageMachines;
@@ -1180,7 +1243,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     }
 
     const hasRed = payload.shortageAlerts.some((a: any) => a.type === "RED");
-    const hasOrange = payload.shortageAlerts.some((a: any) => a.type === "ORANGE");
+    const hasOrange = payload.shortageAlerts.some(
+      (a: any) => a.type === "ORANGE",
+    );
 
     // Don't show dots for Shortage Tetap (only show for new or increased shortage)
     if (!hasRed && !hasOrange) {
@@ -1246,15 +1311,61 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                   History Perubahan PPIC
                 </h2>
                 <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-full">
-                  {changedSnapshots.length}
+                  {detailChangedSnapshots.length}
                 </span>
               </div>
 
+              {/* Date / Week Filter Section */}
+              <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <Filter className="w-3 h-3 text-indigo-500" />
+                    Filter Periode:
+                  </span>
+                  {(detailDateFilter.startDate || detailDateFilter.endDate) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDetailDateFilter({ startDate: "", endDate: "" });
+                        setCurrentPage(1);
+                      }}
+                      className="text-[10px] font-semibold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors"
+                      title="Tampilkan seluruh riwayat perubahan tanpa batas tanggal"
+                    >
+                      Lihat Semua
+                    </button>
+                  )}
+                </div>
+                <div className="w-full">
+                  <DateRangePicker
+                    startDate={detailDateFilter.startDate}
+                    endDate={detailDateFilter.endDate}
+                    onStartDateChange={(d) => {
+                      setDetailDateFilter((prev) => ({
+                        ...prev,
+                        startDate: d,
+                      }));
+                      setCurrentPage(1);
+                    }}
+                    onEndDateChange={(d) => {
+                      setDetailDateFilter((prev) => ({ ...prev, endDate: d }));
+                      setCurrentPage(1);
+                    }}
+                    showTodayButton={true}
+                  />
+                </div>
+              </div>
+
               <div className="flex-1 overflow-auto bg-slate-50/50 dark:bg-slate-900/50 p-3 space-y-3 transition-colors [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700 [&::-webkit-scrollbar-thumb]:rounded-full">
-                {changedSnapshots.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-40 text-slate-500 dark:text-slate-400 text-sm text-center px-4">
+                {detailChangedSnapshots.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-48 text-slate-500 dark:text-slate-400 text-sm text-center px-4">
                     <Info className="w-8 h-8 mb-2 text-slate-300 dark:text-slate-600" />
-                    <p>Belum ada rekaman perubahan Planning Style.</p>
+                    <p className="font-semibold text-xs text-slate-600 dark:text-slate-300">
+                      Tidak ada perubahan planning
+                    </p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                      pada periode yang sedang dipilih.
+                    </p>
                   </div>
                 ) : (
                   paginatedSnapshots.map((snapshot, idx) => {
@@ -1318,7 +1429,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
               </div>
 
               {/* Pagination Footer */}
-              {changedSnapshots.length > itemsPerPage && (
+              {detailChangedSnapshots.length > itemsPerPage && (
                 <div className="px-4 py-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0 transition-colors">
                   <button
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
@@ -1353,18 +1464,20 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                     Detail Perubahan Kebutuhan Mesin
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Menganalisis apakah perubahan planning style menyebabkan
-                    lonjakan kebutuhan mesin yang signifikan
+                    Analisis dampak perubahan planning style terhadap
+                    naik/turunnya kebutuhan mesin
                   </p>
                 </div>
 
                 <div className="flex-1 overflow-auto p-6">
                   {!selectedSnapshot ? (
-                    <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500">
+                    <div className="flex flex-col items-center justify-center h-full text-slate-400 dark:text-slate-500 py-16">
                       <Activity className="w-12 h-12 mb-3 text-slate-200 dark:text-slate-700" />
-                      <p>
-                        Pilih riwayat perubahan di sebelah kiri untuk melihat
-                        dampaknya.
+                      <p className="text-sm">
+                        Tidak ada perubahan planning pada periode yang dipilih.
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Pilih rentang tanggal atau week lain di panel kiri.
                       </p>
                     </div>
                   ) : (
@@ -1379,14 +1492,24 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           </h3>
                           <div className="flex items-center mt-2 text-xs text-slate-600 dark:text-slate-400 gap-2 flex-wrap">
                             <span className="bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded">
-                              Lama:{" "}
+                              Plan{" "}
+                              {formatPlanWeekName(
+                                selectedSnapshot.lastVersion,
+                                weeklyComparisonData.lastWeekCode,
+                              ) || "Sebelum"}
+                              :{" "}
                               <strong className="text-slate-700 dark:text-slate-300">
                                 {selectedSnapshot.lastMachineStyle || "Kosong"}
                               </strong>
                             </span>
                             <ArrowRight className="w-4 h-4 text-slate-400 dark:text-slate-500" />
                             <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-400 px-2 py-1 rounded">
-                              Baru:{" "}
+                              Plan{" "}
+                              {formatPlanWeekName(
+                                selectedSnapshot.updateVersion,
+                                weeklyComparisonData.updateWeekCode,
+                              ) || "Sesudah"}
+                              :{" "}
                               <strong>
                                 {selectedSnapshot.updateMachineStyle ||
                                   "Kosong"}
@@ -1439,14 +1562,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                               <AlertTriangle className="w-6 h-6 text-amber-500 dark:text-amber-400 mr-4 shrink-0" />
                               <div>
                                 <h4 className="text-sm font-bold text-amber-800 dark:text-amber-300 mb-1">
-                                  Peringatan: Kebutuhan Mesin Melonjak!
+                                  Peringatan: Kebutuhan Mesin Bertambah!
                                 </h4>
                                 <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
-                                  Perubahan style ini membutuhkan{" "}
-                                  <strong>
-                                    mesin baru yang sebelumnya tidak disiapkan
-                                  </strong>{" "}
-                                  atau <strong>jumlah mesin tambahan</strong>.
+                                  Perubahan planning ini membutuhkan{" "}
+                                  <strong>tambahan mesin</strong> jika
+                                  dibandingkan dengan
+                                  <strong> planning style sebelumnya</strong>.
                                   Periksa tabel di bawah pada baris yang
                                   ditandai merah/kuning untuk mengantisipasi{" "}
                                   <em>shortage</em>.
@@ -1480,23 +1602,17 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                     "text-slate-500 dark:text-slate-400";
                                   let diffText = "Tetap";
 
-                                  if (row.isNew) {
+                                  if (row.isNew || row.isIncreased) {
                                     rowClass = "bg-red-50 dark:bg-red-900/30";
                                     diffClass =
                                       "text-red-600 dark:text-red-400 font-bold";
-                                    diffText = `+${row.diff} (Mesin Baru)`;
-                                  } else if (row.isIncreased) {
-                                    rowClass =
-                                      "bg-amber-50 dark:bg-amber-900/30";
-                                    diffClass =
-                                      "text-amber-600 dark:text-amber-400 font-bold";
-                                    diffText = `+${row.diff} (Bertambah)`;
+                                    diffText = `+${formatDecimal(row.diff)} (Bertambah)`;
                                   } else if (row.isDecreased) {
                                     rowClass =
                                       "bg-emerald-50 dark:bg-emerald-900/30";
                                     diffClass =
                                       "text-emerald-600 dark:text-emerald-400 font-medium";
-                                    diffText = `${row.diff} (Berkurang)`;
+                                    diffText = `${formatDecimal(row.diff)} (Berkurang)`;
                                   }
 
                                   return (
@@ -1508,10 +1624,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         {row.machine}
                                       </td>
                                       <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400">
-                                        {row.oldReq || "-"}
+                                        {row.oldReq
+                                          ? formatDecimal(row.oldReq)
+                                          : "-"}
                                       </td>
                                       <td className="px-4 py-3 text-center font-bold text-slate-800 dark:text-slate-200">
-                                        {row.newReq || "-"}
+                                        {row.newReq
+                                          ? formatDecimal(row.newReq)
+                                          : "-"}
                                       </td>
                                       <td
                                         className={`px-4 py-3 text-center text-xs ${diffClass}`}
@@ -1627,7 +1747,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                   (alert: any, j: number) => (
                                     <span
                                       key={j}
-                                      title={`Before: ${alert.lastReq}, After: ${alert.updateReq} (Kapasitas: ${alert.availCount})`}
+                                      title={`Before: ${formatDecimal(alert.lastReq)}, After: ${formatDecimal(alert.updateReq)} (Kapasitas: ${formatDecimal(alert.availCount)})`}
                                       className={`inline-block mr-1.5 mb-1.5 px-2 py-1 rounded text-[10px] font-semibold border cursor-help ${
                                         alert.type === "RED"
                                           ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50"
@@ -1717,7 +1837,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                           style={{ color: p.color }}
                                         >
                                           {labels[p.dataKey] || p.dataKey} :{" "}
-                                          {p.value}
+                                          {formatDecimal(p.value)}
                                         </p>
                                       );
                                     })}
@@ -1861,362 +1981,439 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                 </div>
 
                 {/* Per-Line Style Detail Table (tab: style) */}
-                {detailTab === "style" && selectedChartWeek && selectedWeekLineData.length > 0 && (
-                  <div className="mb-6 border border-indigo-200 dark:border-indigo-800/50 rounded-xl overflow-hidden shadow-sm transition-all duration-300">
-                    <div className="px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-indigo-800 dark:text-indigo-300 flex items-center">
-                        <Layers className="w-4 h-4 mr-2" />
-                        Detail Style per Line — {String(selectedChartWeek).split("-")[0]}
-                      </h4>
-                      <span className="text-[10px] text-indigo-500 dark:text-indigo-400">
-                        Klik baris untuk detail mesin
-                      </span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[780px] text-sm text-left border-collapse">
-                        <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
-                          <tr>
-                            <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[80px]">
-                              Line
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 min-w-[180px]">
-                              <div>Style Plan (Before)</div>
-                              <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                ({weeklyComparisonData.lastVersionLabel})
-                              </div>
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400 min-w-[180px]">
-                              <div>Style Plan (After)</div>
-                              <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                ({weeklyComparisonData.updateVersionLabel})
-                              </div>
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[140px]">
-                              Tanggal
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-center text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
-                              <div>Kebutuhan</div>
-                              <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                Before
-                              </div>
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[100px]">
-                              <div>Kebutuhan</div>
-                              <div className="text-[10px] font-normal opacity-85 mt-0.5">
-                                After
-                              </div>
-                            </th>
-                            <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[80px]">
-                              Detail
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
-                          {selectedWeekLineData.map((lineData) => {
-                            const totalLineRows = lineData.styles.reduce(
-                              (sum, s) =>
-                                sum +
-                                1 +
-                                (expandedLines.has(
-                                  `${lineData.line}_${s.startDate}_${s.updateStyle}_${s.lastStyle}`
-                                )
-                                  ? 1
-                                  : 0),
-                              0
-                            );
+                {detailTab === "style" &&
+                  selectedChartWeek &&
+                  selectedWeekLineData.length > 0 && (
+                    <div className="mb-6 border border-indigo-200 dark:border-indigo-800/50 rounded-xl overflow-hidden shadow-sm transition-all duration-300">
+                      <div className="px-4 py-3 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800/50 flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-indigo-800 dark:text-indigo-300 flex items-center">
+                          <Layers className="w-4 h-4 mr-2" />
+                          Detail Style per Line —{" "}
+                          {String(selectedChartWeek).split("-")[0]}
+                        </h4>
+                        <span className="text-[10px] text-indigo-500 dark:text-indigo-400">
+                          Klik baris untuk detail mesin
+                        </span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[780px] text-sm text-left border-collapse">
+                          <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
+                            <tr>
+                              <th className="px-4 py-3 font-semibold whitespace-nowrap min-w-[80px]">
+                                Line
+                              </th>
+                              <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-400 min-w-[180px]">
+                                <div>Style Plan (Before)</div>
+                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                  ({weeklyComparisonData.lastVersionLabel})
+                                </div>
+                              </th>
+                              <th className="px-4 py-3 font-semibold text-indigo-600 dark:text-indigo-400 min-w-[180px]">
+                                <div>Style Plan (After)</div>
+                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                  ({weeklyComparisonData.updateVersionLabel})
+                                </div>
+                              </th>
+                              <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[140px]">
+                                Tanggal
+                              </th>
+                              <th className="px-4 py-3 font-semibold text-center text-slate-600 dark:text-slate-400 whitespace-nowrap min-w-[100px]">
+                                <div>Kebutuhan</div>
+                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                  Before
+                                </div>
+                              </th>
+                              <th className="px-4 py-3 font-semibold text-center text-indigo-600 dark:text-indigo-400 whitespace-nowrap min-w-[100px]">
+                                <div>Kebutuhan</div>
+                                <div className="text-[10px] font-normal opacity-85 mt-0.5">
+                                  After
+                                </div>
+                              </th>
+                              <th className="px-4 py-3 font-semibold text-center whitespace-nowrap min-w-[80px]">
+                                Detail
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
+                            {selectedWeekLineData.map((lineData) => {
+                              const totalLineRows = lineData.styles.reduce(
+                                (sum, s) =>
+                                  sum +
+                                  1 +
+                                  (expandedLines.has(
+                                    `${lineData.line}_${s.startDate}_${s.updateStyle}_${s.lastStyle}`,
+                                  )
+                                    ? 1
+                                    : 0),
+                                0,
+                              );
 
-                            return (
-                              <React.Fragment key={lineData.line}>
-                                {lineData.styles.map((style, idx) => {
-                                  const styleKey = `${lineData.line}_${style.startDate}_${style.updateStyle}_${style.lastStyle}`;
-                                  const isExpanded = expandedLines.has(styleKey);
+                              return (
+                                <React.Fragment key={lineData.line}>
+                                  {lineData.styles.map((style, idx) => {
+                                    const styleKey = `${lineData.line}_${style.startDate}_${style.updateStyle}_${style.lastStyle}`;
+                                    const isExpanded =
+                                      expandedLines.has(styleKey);
 
-                                  const toggleExpand = () => {
-                                    setExpandedLines((prev) => {
-                                      const next = new Set(prev);
-                                      if (next.has(styleKey)) {
-                                        next.delete(styleKey);
-                                      } else {
-                                        next.add(styleKey);
-                                      }
-                                      return next;
-                                    });
-                                  };
+                                    const toggleExpand = () => {
+                                      setExpandedLines((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(styleKey)) {
+                                          next.delete(styleKey);
+                                        } else {
+                                          next.add(styleKey);
+                                        }
+                                        return next;
+                                      });
+                                    };
 
-                                  let rowBg = "bg-white dark:bg-slate-900";
-                                  let rowBorder = "border-l-4 border-l-transparent";
-                                  if (style.hasWorseGap) {
-                                    rowBg = "bg-red-50/60 dark:bg-red-950/35";
-                                    rowBorder = "border-l-4 border-l-red-500";
-                                  } else if (style.hasShortage) {
-                                    rowBg = "bg-amber-50/40 dark:bg-amber-950/20";
-                                    rowBorder = "border-l-4 border-l-amber-500";
-                                  } else if (style.styleChanged) {
-                                    rowBg = "bg-blue-50/30 dark:bg-blue-900/10";
-                                  }
+                                    let rowBg = "bg-white dark:bg-slate-900";
+                                    let rowBorder =
+                                      "border-l-4 border-l-transparent";
+                                    if (style.hasWorseGap) {
+                                      rowBg = "bg-red-50/60 dark:bg-red-950/35";
+                                      rowBorder = "border-l-4 border-l-red-500";
+                                    } else if (style.hasShortage) {
+                                      rowBg =
+                                        "bg-amber-50/40 dark:bg-amber-950/20";
+                                      rowBorder =
+                                        "border-l-4 border-l-amber-500";
+                                    } else if (style.styleChanged) {
+                                      rowBg =
+                                        "bg-blue-50/30 dark:bg-blue-900/10";
+                                    }
 
-                                  return (
-                                    <React.Fragment key={styleKey}>
-                                      <tr
-                                        className={`${rowBg} ${rowBorder} transition-colors hover:brightness-[0.97] dark:hover:brightness-110 cursor-pointer select-none`}
-                                        onClick={toggleExpand}
-                                      >
-                                        {idx === 0 && (
-                                          <td
-                                            className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200 align-top border-r border-slate-200/60 dark:border-slate-700/60"
-                                            rowSpan={totalLineRows}
-                                          >
-                                            <div className="flex items-center gap-1.5 sticky top-2">
+                                    return (
+                                      <React.Fragment key={styleKey}>
+                                        <tr
+                                          className={`${rowBg} ${rowBorder} transition-colors hover:brightness-[0.97] dark:hover:brightness-110 cursor-pointer select-none`}
+                                          onClick={toggleExpand}
+                                        >
+                                          {idx === 0 && (
+                                            <td
+                                              className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200 align-top border-r border-slate-200/60 dark:border-slate-700/60"
+                                              rowSpan={totalLineRows}
+                                            >
+                                              <div className="flex items-center gap-1.5 sticky top-2">
+                                                <span
+                                                  className={`text-xs font-bold px-2 py-0.5 rounded-md text-white ${
+                                                    lineData.hasWorseGap
+                                                      ? "bg-red-600 dark:bg-red-700"
+                                                      : lineData.hasShortage
+                                                        ? "bg-amber-600 dark:bg-amber-700"
+                                                        : "bg-slate-800 dark:bg-slate-700"
+                                                  }`}
+                                                >
+                                                  {lineData.line}
+                                                </span>
+                                                {lineData.hasWorseGap && (
+                                                  <span
+                                                    className="flex items-center gap-0.5 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800/50 animate-pulse"
+                                                    title="Line ini memiliki perubahan style yang memperparah kekurangan mesin (Gap memburuk)"
+                                                  >
+                                                    <AlertTriangle className="w-3 h-3" />
+                                                    Gap ↑
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </td>
+                                          )}
+
+                                          {/* Style Before */}
+                                          <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
+                                            <span className="font-medium">
+                                              {style.lastDisplayStyle ||
+                                                style.lastStyle}
+                                            </span>
+                                          </td>
+
+                                          {/* Style After */}
+                                          <td className="px-4 py-3 text-xs max-w-[240px]">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
                                               <span
-                                                className={`text-xs font-bold px-2 py-0.5 rounded-md text-white ${
-                                                  lineData.hasWorseGap
-                                                    ? "bg-red-600 dark:bg-red-700"
-                                                    : lineData.hasShortage
-                                                    ? "bg-amber-600 dark:bg-amber-700"
-                                                    : "bg-slate-800 dark:bg-slate-700"
+                                                className={`font-semibold ${
+                                                  style.hasWorseGap
+                                                    ? "text-red-700 dark:text-red-300 font-bold"
+                                                    : style.hasShortage
+                                                      ? "text-amber-700 dark:text-amber-300 font-bold"
+                                                      : "text-slate-800 dark:text-slate-200"
                                                 }`}
                                               >
-                                                {lineData.line}
+                                                {style.updateDisplayStyle ||
+                                                  style.updateStyle}
                                               </span>
-                                              {lineData.hasWorseGap && (
-                                                <span
-                                                  className="flex items-center gap-0.5 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded border border-red-200 dark:border-red-800/50 animate-pulse"
-                                                  title="Line ini memiliki perubahan style yang memperparah kekurangan mesin (Gap memburuk)"
-                                                >
-                                                  <AlertTriangle className="w-3 h-3" />
-                                                  Gap ↑
+                                              {style.hasShortage && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800/70 shadow-sm animate-pulse">
+                                                  <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
+                                                  <span>
+                                                    Shortage (
+                                                    {style.shortageMachines.join(
+                                                      ", ",
+                                                    )}
+                                                    )
+                                                  </span>
                                                 </span>
                                               )}
+                                              {style.styleChanged &&
+                                                !style.hasShortage && (
+                                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
+                                                    Ganti Style
+                                                  </span>
+                                                )}
                                             </div>
                                           </td>
-                                        )}
 
-                                        {/* Style Before */}
-                                        <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-400 max-w-[220px]">
-                                          <span className="font-medium">
-                                            {style.lastDisplayStyle || style.lastStyle}
-                                          </span>
-                                        </td>
-
-                                        {/* Style After */}
-                                        <td className="px-4 py-3 text-xs max-w-[240px]">
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            <span
-                                              className={`font-semibold ${
-                                                style.hasWorseGap
-                                                  ? "text-red-700 dark:text-red-300 font-bold"
-                                                  : style.hasShortage
-                                                  ? "text-amber-700 dark:text-amber-300 font-bold"
-                                                  : "text-slate-800 dark:text-slate-200"
-                                              }`}
-                                            >
-                                              {style.updateDisplayStyle || style.updateStyle}
-                                            </span>
-                                            {style.hasShortage && (
-                                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800/70 shadow-sm animate-pulse">
-                                                <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
+                                          {/* Tanggal */}
+                                          <td
+                                            className={`px-4 py-3 text-center whitespace-nowrap text-xs ${
+                                              style.hasShortage
+                                                ? "text-red-800 dark:text-red-300 font-medium"
+                                                : "text-slate-600 dark:text-slate-300"
+                                            }`}
+                                          >
+                                            {style.startDate ? (
+                                              style.startDate ===
+                                              style.endDate ? (
+                                                format(
+                                                  new Date(
+                                                    style.startDate +
+                                                      "T00:00:00",
+                                                  ),
+                                                  "dd MMM yyyy",
+                                                )
+                                              ) : (
                                                 <span>
-                                                  Shortage ({style.shortageMachines.join(", ")})
+                                                  {format(
+                                                    new Date(
+                                                      style.startDate +
+                                                        "T00:00:00",
+                                                    ),
+                                                    "dd MMM yyyy",
+                                                  )}
+                                                  <span className="text-slate-400 dark:text-slate-500 mx-1 font-normal">
+                                                    s/d
+                                                  </span>
+                                                  {format(
+                                                    new Date(
+                                                      style.endDate +
+                                                        "T00:00:00",
+                                                    ),
+                                                    "dd MMM yyyy",
+                                                  )}
                                                 </span>
-                                              </span>
-                                            )}
-                                            {style.styleChanged && !style.hasShortage && (
-                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50">
-                                                Ganti Style
-                                              </span>
-                                            )}
-                                          </div>
-                                        </td>
-
-                                        {/* Tanggal */}
-                                        <td
-                                          className={`px-4 py-3 text-center whitespace-nowrap text-xs ${
-                                            style.hasShortage
-                                              ? "text-red-800 dark:text-red-300 font-medium"
-                                              : "text-slate-600 dark:text-slate-300"
-                                          }`}
-                                        >
-                                          {style.startDate ? (
-                                            style.startDate === style.endDate ? (
-                                              format(
-                                                new Date(style.startDate + "T00:00:00"),
-                                                "dd MMM yyyy"
                                               )
                                             ) : (
-                                              <span>
-                                                {format(
-                                                  new Date(style.startDate + "T00:00:00"),
-                                                  "dd MMM yyyy"
-                                                )}
-                                                <span className="text-slate-400 dark:text-slate-500 mx-1 font-normal">
-                                                  s/d
-                                                </span>
-                                                {format(
-                                                  new Date(style.endDate + "T00:00:00"),
-                                                  "dd MMM yyyy"
-                                                )}
-                                              </span>
-                                            )
-                                          ) : (
-                                            "-"
-                                          )}
-                                        </td>
+                                              "-"
+                                            )}
+                                          </td>
 
-                                        {/* Kebutuhan Before */}
-                                        <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap text-xs">
-                                          {style.totalLastReq || "-"}
-                                        </td>
+                                          {/* Kebutuhan Before */}
+                                          <td className="px-4 py-3 text-center text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap text-xs">
+                                            {style.totalLastReq
+                                              ? formatDecimal(
+                                                  style.totalLastReq,
+                                                )
+                                              : "-"}
+                                          </td>
 
-                                        {/* Kebutuhan After */}
-                                        <td
-                                          className={`px-4 py-3 text-center font-bold whitespace-nowrap text-xs ${
-                                            style.hasWorseGap
-                                              ? "text-red-600 dark:text-red-400"
-                                              : style.hasShortage
-                                              ? "text-amber-600 dark:text-amber-400"
-                                              : "text-indigo-600 dark:text-indigo-400"
-                                          }`}
-                                        >
-                                          {style.totalUpdateReq || "-"}
-                                        </td>
-
-                                        {/* Detail Button */}
-                                        <td className="px-4 py-3 text-center whitespace-nowrap">
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleExpand();
-                                            }}
-                                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors border shadow-sm ${
-                                              isExpanded
-                                                ? "bg-indigo-600 text-white border-indigo-600 shadow-indigo-500/20"
-                                                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
-                                            }`}
-                                            title="Lihat detail kebutuhan mesin style ini"
-                                          >
-                                            <span>Mesin</span>
-                                            <ChevronDown
-                                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                                                isExpanded ? "rotate-180" : ""
-                                              }`}
-                                            />
-                                          </button>
-                                        </td>
-                                      </tr>
-
-                                      {/* Expanded machine breakdown for THIS style period */}
-                                      {isExpanded && (
-                                        <tr>
+                                          {/* Kebutuhan After */}
                                           <td
-                                            colSpan={6}
-                                            className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60"
+                                            className={`px-4 py-3 text-center font-bold whitespace-nowrap text-xs ${
+                                              style.hasWorseGap
+                                                ? "text-red-600 dark:text-red-400"
+                                                : style.hasShortage
+                                                  ? "text-amber-600 dark:text-amber-400"
+                                                  : "text-indigo-600 dark:text-indigo-400"
+                                            }`}
                                           >
-                                            <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-inner">
-                                              <div className="px-4 py-2 bg-slate-100 dark:bg-slate-700/60 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between">
-                                                <span>
-                                                  Breakdown Kebutuhan Mesin: <strong>{style.updateDisplayStyle || style.updateStyle}</strong>
-                                                </span>
-                                              </div>
-                                              {style.machineBreakdown.length === 0 ? (
-                                                <div className="p-3 text-center text-xs text-slate-400">
-                                                  Tidak ada kebutuhan mesin untuk style ini.
-                                                </div>
-                                              ) : (
-                                                <table className="w-full text-xs">
-                                                  <thead>
-                                                    <tr className="bg-slate-50 dark:bg-slate-700/40 text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-700/80">
-                                                      <th className="px-4 py-2 text-left font-semibold">
-                                                        Jenis Mesin
-                                                      </th>
-                                                      <th className="px-4 py-2 text-center font-semibold text-emerald-600 dark:text-emerald-400">
-                                                        Tersedia
-                                                      </th>
-                                                      <th className="px-4 py-2 text-center font-semibold text-slate-600 dark:text-slate-400">
-                                                        Kebutuhan Before ({weeklyComparisonData.lastVersionLabel})
-                                                      </th>
-                                                      <th className="px-4 py-2 text-center font-semibold text-indigo-600 dark:text-indigo-400">
-                                                        Kebutuhan After ({weeklyComparisonData.updateVersionLabel})
-                                                      </th>
-                                                      <th className="px-4 py-2 text-center font-semibold">
-                                                        Status
-                                                      </th>
-                                                    </tr>
-                                                  </thead>
-                                                  <tbody className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
-                                                    {style.machineBreakdown.map((m) => {
-                                                      const isShortage = m.available < m.updateReq;
-                                                      const isReqIncreased = m.updateReq > m.lastReq;
+                                            {style.totalUpdateReq
+                                              ? formatDecimal(
+                                                  style.totalUpdateReq,
+                                                )
+                                              : "-"}
+                                          </td>
 
-                                                      let mRowBg =
-                                                        "hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors";
-                                                      if (isShortage) {
-                                                        mRowBg += " bg-red-50/60 dark:bg-red-950/25";
-                                                      } else if (isReqIncreased) {
-                                                        mRowBg += " bg-amber-50/40 dark:bg-amber-950/20";
-                                                      }
-
-                                                      return (
-                                                        <tr key={m.machine} className={mRowBg}>
-                                                          <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">
-                                                            {m.machine}
-                                                          </td>
-                                                          <td className="px-4 py-2 text-center font-medium text-slate-600 dark:text-slate-300">
-                                                            {m.available}
-                                                          </td>
-                                                          <td className="px-4 py-2 text-center font-medium text-slate-500 dark:text-slate-400">
-                                                            {m.lastReq}
-                                                          </td>
-                                                          <td
-                                                            className={`px-4 py-2 text-center font-bold ${
-                                                              isShortage
-                                                                ? "text-red-600 dark:text-red-400"
-                                                                : isReqIncreased
-                                                                ? "text-indigo-600 dark:text-indigo-400"
-                                                                : "text-slate-700 dark:text-slate-200"
-                                                            }`}
-                                                          >
-                                                            {m.updateReq}
-                                                          </td>
-                                                          <td className="px-4 py-2 text-center">
-                                                            {isShortage ? (
-                                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
-                                                                Shortage ({m.gapAfter})
-                                                              </span>
-                                                            ) : isReqIncreased ? (
-                                                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
-                                                                Naik (+{m.updateReq - m.lastReq})
-                                                              </span>
-                                                            ) : (
-                                                              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                                                                Aman
-                                                              </span>
-                                                            )}
-                                                          </td>
-                                                        </tr>
-                                                      );
-                                                    })}
-                                                  </tbody>
-                                                </table>
-                                              )}
-                                            </div>
+                                          {/* Detail Button */}
+                                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleExpand();
+                                              }}
+                                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-colors border shadow-sm ${
+                                                isExpanded
+                                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-indigo-500/20"
+                                                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                              }`}
+                                              title="Lihat detail kebutuhan mesin style ini"
+                                            >
+                                              <span>Mesin</span>
+                                              <ChevronDown
+                                                className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                                  isExpanded ? "rotate-180" : ""
+                                                }`}
+                                              />
+                                            </button>
                                           </td>
                                         </tr>
-                                      )}
-                                    </React.Fragment>
-                                  );
-                                })}
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+
+                                        {/* Expanded machine breakdown for THIS style period */}
+                                        {isExpanded && (
+                                          <tr>
+                                            <td
+                                              colSpan={6}
+                                              className="p-3 border-b border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/60"
+                                            >
+                                              <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shadow-inner">
+                                                <div className="px-4 py-2 bg-slate-100 dark:bg-slate-700/60 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                                                  <span>
+                                                    Breakdown Kebutuhan Mesin:{" "}
+                                                    <strong>
+                                                      {style.updateDisplayStyle ||
+                                                        style.updateStyle}
+                                                    </strong>
+                                                  </span>
+                                                </div>
+                                                {style.machineBreakdown
+                                                  .length === 0 ? (
+                                                  <div className="p-3 text-center text-xs text-slate-400">
+                                                    Tidak ada kebutuhan mesin
+                                                    untuk style ini.
+                                                  </div>
+                                                ) : (
+                                                  <table className="w-full text-xs">
+                                                    <thead>
+                                                      <tr className="bg-slate-50 dark:bg-slate-700/40 text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-700/80">
+                                                        <th className="px-4 py-2 text-left font-semibold">
+                                                          Jenis Mesin
+                                                        </th>
+                                                        <th className="px-4 py-2 text-center font-semibold text-emerald-600 dark:text-emerald-400">
+                                                          Tersedia
+                                                        </th>
+                                                        <th className="px-4 py-2 text-center font-semibold text-slate-600 dark:text-slate-400">
+                                                          Kebutuhan Before (
+                                                          {
+                                                            weeklyComparisonData.lastVersionLabel
+                                                          }
+                                                          )
+                                                        </th>
+                                                        <th className="px-4 py-2 text-center font-semibold text-indigo-600 dark:text-indigo-400">
+                                                          Kebutuhan After (
+                                                          {
+                                                            weeklyComparisonData.updateVersionLabel
+                                                          }
+                                                          )
+                                                        </th>
+                                                        <th className="px-4 py-2 text-center font-semibold">
+                                                          Status
+                                                        </th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-200/60 dark:divide-slate-700/60">
+                                                      {style.machineBreakdown.map(
+                                                        (m) => {
+                                                          const isShortage =
+                                                            m.available <
+                                                            m.updateReq;
+                                                          const isReqIncreased =
+                                                            m.updateReq >
+                                                            m.lastReq;
+
+                                                          let mRowBg =
+                                                            "hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors";
+                                                          if (isShortage) {
+                                                            mRowBg +=
+                                                              " bg-red-50/60 dark:bg-red-950/25";
+                                                          } else if (
+                                                            isReqIncreased
+                                                          ) {
+                                                            mRowBg +=
+                                                              " bg-amber-50/40 dark:bg-amber-950/20";
+                                                          }
+
+                                                          return (
+                                                            <tr
+                                                              key={m.machine}
+                                                              className={mRowBg}
+                                                            >
+                                                              <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-200">
+                                                                {m.machine}
+                                                              </td>
+                                                              <td className="px-4 py-2 text-center font-medium text-slate-600 dark:text-slate-300">
+                                                                {formatDecimal(
+                                                                  m.available,
+                                                                )}
+                                                              </td>
+                                                              <td className="px-4 py-2 text-center font-medium text-slate-500 dark:text-slate-400">
+                                                                {formatDecimal(
+                                                                  m.lastReq,
+                                                                )}
+                                                              </td>
+                                                              <td
+                                                                className={`px-4 py-2 text-center font-bold ${
+                                                                  isShortage
+                                                                    ? "text-red-600 dark:text-red-400"
+                                                                    : isReqIncreased
+                                                                      ? "text-indigo-600 dark:text-indigo-400"
+                                                                      : "text-slate-700 dark:text-slate-200"
+                                                                }`}
+                                                              >
+                                                                {formatDecimal(
+                                                                  m.updateReq,
+                                                                )}
+                                                              </td>
+                                                              <td className="px-4 py-2 text-center">
+                                                                {isShortage ? (
+                                                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800">
+                                                                    Shortage (
+                                                                    {formatSignedDecimal(
+                                                                      m.gapAfter,
+                                                                    )}
+                                                                    )
+                                                                  </span>
+                                                                ) : isReqIncreased ? (
+                                                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                                                                    Naik (+
+                                                                    {formatDecimal(
+                                                                      m.updateReq -
+                                                                        m.lastReq,
+                                                                    )}
+                                                                    )
+                                                                  </span>
+                                                                ) : (
+                                                                  <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                                    Aman
+                                                                  </span>
+                                                                )}
+                                                              </td>
+                                                            </tr>
+                                                          );
+                                                        },
+                                                      )}
+                                                    </tbody>
+                                                  </table>
+                                                )}
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        )}
+                                      </React.Fragment>
+                                    );
+                                  })}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Machine Availability Table (tab: mesin) */}
-                {detailTab === "mesin" && selectedChartWeek && selectedWeekMachineData.length > 0 ? (
+                {detailTab === "mesin" &&
+                selectedChartWeek &&
+                selectedWeekMachineData.length > 0 ? (
                   <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm overflow-x-auto transition-colors">
                     <table className="w-full min-w-[760px] text-sm text-left">
                       <thead className="bg-slate-100 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700 transition-colors">
@@ -2289,21 +2486,21 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 {row.machine}
                               </td>
                               <td className="px-4 py-4 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors whitespace-nowrap">
-                                {row.available}
+                                {formatDecimal(row.available)}
                               </td>
                               <td className="px-4 py-4 text-center font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {row.lastReq}
+                                {formatDecimal(row.lastReq)}
                               </td>
                               <td className="px-4 py-4 text-center font-bold text-indigo-600 dark:text-indigo-400 text-base whitespace-nowrap">
-                                {row.updateReq}
+                                {formatDecimal(row.updateReq)}
                               </td>
                               <td className="px-4 py-4 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors whitespace-nowrap">
-                                {row.oldGap}
+                                {formatSignedDecimal(row.oldGap)}
                               </td>
                               <td
                                 className={`px-4 py-4 text-center font-bold text-base whitespace-nowrap ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
                               >
-                                {row.newGap}
+                                {formatSignedDecimal(row.newGap)}
                               </td>
                               <td className="px-4 py-4 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle whitespace-nowrap">
                                 <div
@@ -2322,27 +2519,35 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                             Total
                           </td>
                           <td className="px-4 py-4 text-center text-slate-700 dark:text-slate-300 whitespace-nowrap">
-                            {selectedWeekMachineData.reduce(
-                              (acc, r) => acc + r.available,
-                              0,
+                            {formatDecimal(
+                              selectedWeekMachineData.reduce(
+                                (acc, r) => acc + r.available,
+                                0,
+                              ),
                             )}
                           </td>
                           <td className="px-4 py-4 text-center font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                            {selectedWeekMachineData.reduce(
-                              (acc, r) => acc + r.lastReq,
-                              0,
+                            {formatDecimal(
+                              selectedWeekMachineData.reduce(
+                                (acc, r) => acc + r.lastReq,
+                                0,
+                              ),
                             )}
                           </td>
                           <td className="px-4 py-4 text-center font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap text-base">
-                            {selectedWeekMachineData.reduce(
-                              (acc, r) => acc + r.updateReq,
-                              0,
+                            {formatDecimal(
+                              selectedWeekMachineData.reduce(
+                                (acc, r) => acc + r.updateReq,
+                                0,
+                              ),
                             )}
                           </td>
                           <td className="px-4 py-4 text-center text-slate-600 dark:text-slate-400 whitespace-nowrap border-l border-slate-100 dark:border-slate-800">
-                            {selectedWeekMachineData.reduce(
-                              (acc, r) => acc + r.oldGap,
-                              0,
+                            {formatSignedDecimal(
+                              selectedWeekMachineData.reduce(
+                                (acc, r) => acc + r.oldGap,
+                                0,
+                              ),
                             )}
                           </td>
                           <td
@@ -2355,9 +2560,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 : "text-emerald-600 dark:text-emerald-500"
                             }`}
                           >
-                            {selectedWeekMachineData.reduce(
-                              (acc, r) => acc + r.newGap,
-                              0,
+                            {formatSignedDecimal(
+                              selectedWeekMachineData.reduce(
+                                (acc, r) => acc + r.newGap,
+                                0,
+                              ),
                             )}
                           </td>
                           <td className="px-4 py-4 border-l border-slate-100 dark:border-slate-800"></td>

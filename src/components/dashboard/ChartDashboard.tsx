@@ -13,6 +13,7 @@ import {
   getMachineShortagesData,
   calculateMachineRequirements,
 } from "../../utils/mrpCalculations";
+import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 import {
   LineChart,
   Line,
@@ -650,7 +651,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
               </div>
               <div className="mt-2">
                 <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                  {capacityStats.totalCapacity}{" "}
+                  {formatDecimal(capacityStats.totalCapacity)}{" "}
                   <span className="text-xs font-normal text-slate-500">
                     unit
                   </span>
@@ -668,7 +669,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
               </div>
               <div className="mt-2">
                 <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {capacityStats.totalRequired}{" "}
+                  {formatDecimal(capacityStats.totalRequired)}{" "}
                   <span className="text-xs font-normal text-slate-500">
                     unit
                   </span>
@@ -728,7 +729,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                   Status Kepemilikan Mesin
                 </h3>
                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                  {capacityStats.totalCapacity} unit total
+                  {formatDecimal(capacityStats.totalCapacity)} unit total
                 </span>
               </div>
               <div className="h-56 w-full">
@@ -804,7 +805,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                         color: "#f8fafc",
                       }}
                       formatter={(value: any, name: any, props: any) => [
-                        `${value} unit (${(props.payload.percent * 100).toFixed(1)}%)`,
+                        `${formatDecimal(value)} unit (${((props.payload.percent || 0) * 100).toFixed(1)}%)`,
                         name,
                       ]}
                     />
@@ -872,7 +873,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                         color: "#f8fafc",
                       }}
                       formatter={(value: any, name: any) => [
-                        `${value} unit`,
+                        `${formatDecimal(value)} unit`,
                         name,
                       ]}
                     />
@@ -926,7 +927,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                         formatter={(v: any) =>
                           !v || Number(v) === 0
                             ? ""
-                            : Math.round(Number(v)).toLocaleString("id-ID")
+                            : formatDecimal(Number(v))
                         }
                       />
                     </Bar>
@@ -972,14 +973,14 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                               : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
                           }`}
                         >
-                          {isShortage ? `Shortage ${m.gap}` : "Aman"}
+                          {isShortage ? `Shortage ${formatSignedDecimal(m.gap)}` : "Aman"}
                         </span>
                       </div>
                       <div className="text-slate-500 dark:text-slate-400 text-[11px]">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">
-                          {m.required}
+                          {formatDecimal(m.required)}
                         </span>{" "}
-                        / {m.available} unit ({m.utilization}%)
+                        / {formatDecimal(m.available)} unit ({formatDecimal(m.utilization)}%)
                       </div>
 
                       {/* Progress bar */}
@@ -1084,10 +1085,10 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                               {m.machine}
                             </td>
                             <td className="px-4 py-3 text-orange-500 font-medium">
-                              {m.shortageCount} days
+                              {formatDecimal(m.shortageCount)} days
                             </td>
                             <td className="px-4 py-3 text-red-500 font-medium">
-                              {m.maxShortageVolume} units/day
+                              {formatDecimal(m.maxShortageVolume)} units/day
                             </td>
                           </tr>
                         );
@@ -1135,7 +1136,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                             <div className="text-xs text-slate-500 font-normal mt-0.5">
                               Impact Score:{" "}
                               <strong className="text-red-500 dark:text-red-400">
-                                {s.shortageCount} pts
+                                {formatDecimal(s.shortageCount)} pts
                               </strong>
                             </div>
                           </td>

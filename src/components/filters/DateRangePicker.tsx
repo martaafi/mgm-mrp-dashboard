@@ -13,6 +13,7 @@ import {
   endOfWeek,
   addDays,
   getISOWeek,
+  startOfISOWeek,
 } from "date-fns";
 import { enUS } from "date-fns/locale";
 import {
@@ -267,9 +268,30 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     return today;
   };
 
+  const getCurrentWeek = () => {
+    const today = new Date();
+    if (today.getDay() === 0) {
+      today.setDate(today.getDate() + 1);
+    }
+    const monday = startOfISOWeek(today);
+    const saturday = addDays(monday, 5);
+    const weekNum = getISOWeek(today);
+    return {
+      start: monday,
+      end: saturday,
+      startStr: format(monday, "yyyy-MM-dd"),
+      endStr: format(saturday, "yyyy-MM-dd"),
+      weekNum,
+      weekLabel: `W${weekNum}`,
+    };
+  };
+
   const todayDate = getTodayDate();
   const todayStr = format(todayDate, "yyyy-MM-dd");
   const isTodayActive = startDate === todayStr && endDate === todayStr;
+
+  const currentWeek = getCurrentWeek();
+  const isWeekActive = startDate === currentWeek.startStr && endDate === currentWeek.endStr;
 
   const handleSelectToday = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -283,8 +305,18 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     setIsOpen(false);
   };
 
+  const handleSelectThisWeek = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onStartDateChange(currentWeek.startStr);
+    onEndDateChange(currentWeek.endStr);
+    setTempStart(currentWeek.start);
+    setTempEnd(currentWeek.end);
+    setCurrentMonth(currentWeek.start);
+    setIsOpen(false);
+  };
+
   return (
-    <div className="inline-flex items-center gap-1.5" ref={popoverRef}>
+    <div className="inline-flex flex-wrap items-center gap-1.5" ref={popoverRef}>
       {/* Trigger & Popover Container */}
       <div className="relative">
         <button
@@ -297,7 +329,11 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             <span className="font-medium">
               {startDate && endDate
                 ? `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`
-                : "Pilih Tanggal"}
+                : startDate
+                ? `Sejak ${formatDisplayDate(startDate)}`
+                : endDate
+                ? `Sampai ${formatDisplayDate(endDate)}`
+                : "Semua Tanggal"}
             </span>
           </div>
         </button>
@@ -318,11 +354,27 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
               <div className="text-slate-700 dark:text-slate-300 text-[11px] mb-2 font-medium capitalize">
                 {formatRangeText()}
               </div>
-              <div className="flex space-x-2">
+              <div className="flex space-x-1.5">
+                <button
+                  type="button"
+                  onClick={handleSelectThisWeek}
+                  className={`py-1.5 px-2 text-xs font-semibold rounded transition-colors border ${
+                    isWeekActive
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                      : "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border-indigo-200 dark:border-indigo-800/60"
+                  }`}
+                  title="Pilih week yang sedang berjalan"
+                >
+                  {currentWeek.weekLabel} (Minggu Ini)
+                </button>
                 <button
                   type="button"
                   onClick={handleSelectToday}
-                  className="py-1.5 px-3 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/60 rounded transition-colors"
+                  className={`py-1.5 px-2 text-xs font-semibold rounded transition-colors border ${
+                    isTodayActive
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                      : "text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
+                  }`}
                   title="Pilih hari ini"
                 >
                   Today
@@ -348,21 +400,35 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         )}
       </div>
 
-      {/* Quick Today Button Outside */}
+      {/* Quick Week and Today Buttons Outside */}
       {showTodayButton && (
-        <button
-          type="button"
-          onClick={handleSelectToday}
-          className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all shadow-sm ${
-            isTodayActive
-              ? "bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500 shadow-indigo-500/20"
-              : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
-          }`}
-          title="Pilih tanggal hari ini (Today)"
-        >
-          <CalendarIcon className="w-3.5 h-3.5" />
-          <span>Today</span>
-        </button>
+        <div className="inline-flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleSelectThisWeek}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all shadow-sm ${
+              isWeekActive
+                ? "bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500 shadow-indigo-500/20"
+                : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+            }`}
+            title="Pilih week yang sedang berjalan"
+          >
+            <CalendarIcon className="w-3.5 h-3.5" />
+            <span>{currentWeek.weekLabel} (Minggu Ini)</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleSelectToday}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-all shadow-sm ${
+              isTodayActive
+                ? "bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500 shadow-indigo-500/20"
+                : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+            }`}
+            title="Pilih tanggal hari ini (Today)"
+          >
+            <span>Today</span>
+          </button>
+        </div>
       )}
     </div>
   );

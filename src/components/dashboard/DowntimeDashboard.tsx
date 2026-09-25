@@ -57,6 +57,7 @@ import {
   isUsingDefaultDowntimeAppsScriptUrl,
   DEFAULT_DOWNTIME_APPS_SCRIPT_URL,
 } from "../../utils/googleSheetsAPI";
+import { formatDecimal } from "../../utils/formatters";
 
 // @ts-ignore
 import * as XLSX from "xlsx";
@@ -361,7 +362,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             <span>{p.name}:</span>
             <span className="font-bold">
               {typeof p.value === "number"
-                ? Math.round(p.value).toLocaleString("id-ID")
+                ? formatDecimal(p.value, 0)
                 : p.value}
             </span>
           </p>
@@ -544,11 +545,11 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">
-            {Math.round(kpis.totalDowntimeHours).toLocaleString("id-ID")}
+            {formatDecimal(kpis.totalDowntimeHours, 0)}
             <span className="text-sm font-normal text-slate-400 ml-1">jam</span>
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {Math.round(kpis.totalDowntimeMinutes).toLocaleString("id-ID")}{" "}
+            {formatDecimal(kpis.totalDowntimeMinutes, 0)}{" "}
             menit
           </div>
         </div>
@@ -564,7 +565,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">
-            {kpis.totalIncidents.toLocaleString("id-ID")}
+            {formatDecimal(kpis.totalIncidents, 0)}
             <span className="text-sm font-normal text-slate-400 ml-1">
               kejadian
             </span>
@@ -582,7 +583,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">
-            {Math.round(kpis.avgDurationMinutes).toLocaleString("id-ID")}
+            {formatDecimal(kpis.avgDurationMinutes, 0)}
             <span className="text-sm font-normal text-slate-400 ml-1">
               menit
             </span>
@@ -603,7 +604,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             {kpis.topMachineType}
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {Math.round(kpis.topMachineTypeMinutes).toLocaleString("id-ID")}{" "}
+            {formatDecimal(kpis.topMachineTypeMinutes, 0)}{" "}
             menit
           </div>
         </div>
@@ -622,7 +623,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             {kpis.topLine}
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {Math.round(kpis.topLineMinutes).toLocaleString("id-ID")} menit
+            {formatDecimal(kpis.topLineMinutes, 0)} menit
           </div>
         </div>
       </div>
@@ -660,6 +661,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                 <XAxis
                   type="number"
                   tick={{ fontSize: 10 }}
+                  tickFormatter={(v) => formatDecimal(v, 0)}
                   className="text-slate-500"
                 />
                 <YAxis
@@ -688,7 +690,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                     formatter={(v) =>
                       !v || Number(v) === 0
                         ? ""
-                        : Math.round(Number(v)).toLocaleString("id-ID")
+                        : formatDecimal(Number(v), 0)
                     }
                   />
                 </Bar>
@@ -728,6 +730,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                 <XAxis
                   type="number"
                   tick={{ fontSize: 10 }}
+                  tickFormatter={(v) => formatDecimal(v, 0)}
                   className="text-slate-500"
                 />
                 <YAxis
@@ -756,7 +759,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                     formatter={(v) =>
                       !v || Number(v) === 0
                         ? ""
-                        : Math.round(Number(v)).toLocaleString("id-ID")
+                        : formatDecimal(Number(v), 0)
                     }
                   />
                 </Bar>
@@ -796,6 +799,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                 <XAxis
                   type="number"
                   tick={{ fontSize: 10 }}
+                  tickFormatter={(v) => formatDecimal(v, 0)}
                   className="text-slate-500"
                 />
                 <YAxis
@@ -821,7 +825,11 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                     offset={4}
                     fontSize={9}
                     fill="#94a3b8"
-                    formatter={(v) => (!v || Number(v) === 0 ? "" : String(v))}
+                    formatter={(v) =>
+                      !v || Number(v) === 0
+                        ? ""
+                        : formatDecimal(Number(v), 0)
+                    }
                   />
                 </Bar>
               </BarChart>
@@ -879,12 +887,14 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                   <YAxis
                     yAxisId="left"
                     tick={{ fontSize: 10, fill: "#94a3b8" }}
+                    tickFormatter={(v) => formatDecimal(v, 0)}
                   />
                   <YAxis
                     yAxisId="right"
                     orientation="right"
                     tick={{ fontSize: 10, fill: "#94a3b8" }}
                     allowDecimals={false}
+                    tickFormatter={(v) => formatDecimal(v, 0)}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend
@@ -945,13 +955,13 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                 <div className="flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
                   <span>
                     <span className="font-bold text-red-600 dark:text-red-400">
-                      {err.frequency}
+                      {formatDecimal(err.frequency, 0)}
                     </span>{" "}
                     kejadian
                   </span>
                   <span>
                     <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                      {Math.round(err.totalMinutes).toLocaleString("id-ID")}
+                      {formatDecimal(err.totalMinutes, 0)}
                     </span>{" "}
                     menit
                   </span>
@@ -970,7 +980,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
               Downtime Log
             </h3>
             <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              {tableData.length.toLocaleString("id-ID")} baris data
+              {formatDecimal(tableData.length, 0)} baris data
               {searchQuery && ` (filtered)`}
             </p>
           </div>
@@ -1071,13 +1081,13 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                         {r.prodMach || "-"}
                       </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400 whitespace-nowrap text-center">
-                        {r.jamKerja}
+                        {typeof r.jamKerja === "number" ? formatDecimal(r.jamKerja, 0) : r.jamKerja}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <span
                           className={`inline-flex px-2 py-0.5 rounded-md font-bold text-[11px] border ${sev.bg} ${sev.text} ${sev.border}`}
                         >
-                          {Math.round(r.downtimeAktual)} menit
+                          {formatDecimal(r.downtimeAktual, 0)} menit
                         </span>
                       </td>
                     </tr>

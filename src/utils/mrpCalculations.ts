@@ -1,3 +1,4 @@
+import { format, startOfISOWeek, addDays, getISOWeek } from 'date-fns';
 import {
   ProductionPlan,
   MachineRequirementPerStyle,
@@ -16,6 +17,31 @@ import {
   RentalTrialAlert,
   AvailabilityVariation,
 } from '../types/mrp';
+
+/**
+ * Helper to get the current running week date range (Monday - Saturday).
+ * If today is Sunday, shifts to the upcoming Monday.
+ */
+export const getCurrentWeekRange = (): {
+  startDate: string;
+  endDate: string;
+  weekNum: number;
+  weekLabel: string;
+} => {
+  const today = new Date();
+  if (today.getDay() === 0) {
+    today.setDate(today.getDate() + 1); // Sunday -> upcoming Monday
+  }
+  const monday = startOfISOWeek(today);
+  const saturday = addDays(monday, 5);
+  const weekNum = getISOWeek(today);
+  return {
+    startDate: format(monday, "yyyy-MM-dd"),
+    endDate: format(saturday, "yyyy-MM-dd"),
+    weekNum,
+    weekLabel: `W${weekNum}`,
+  };
+};
 
 /**
  * Checks whether a given date string represents a Sunday.

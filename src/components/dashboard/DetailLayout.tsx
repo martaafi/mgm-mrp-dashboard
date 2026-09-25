@@ -8,6 +8,7 @@ import {
   RentalTrialRecord,
 } from "../../types/mrp";
 import { getAdjustedAvailabilityForDateRange, isSunday } from "../../utils/mrpCalculations";
+import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 import { DateRangePicker } from "../filters/DateRangePicker";
 
 interface DetailLayoutProps {
@@ -456,27 +457,27 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                     {row.machine}
                   </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center">
-                    {row.baseCount > 0 ? row.baseCount : "-"}
+                    {row.baseCount > 0 ? formatDecimal(row.baseCount) : "-"}
                   </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center text-red-600 dark:text-red-400 font-semibold">
-                    {row.pinjamCount > 0 ? `+${row.pinjamCount}` : "-"}
+                    {row.pinjamCount > 0 ? `+${formatDecimal(row.pinjamCount)}` : "-"}
                   </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center text-amber-600 dark:text-amber-400 font-semibold">
-                    {row.sewaCount > 0 ? `+${row.sewaCount}` : "-"}
+                    {row.sewaCount > 0 ? `+${formatDecimal(row.sewaCount)}` : "-"}
                   </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center text-indigo-600 dark:text-indigo-400 font-semibold">
-                    {row.trialCount > 0 ? `+${row.trialCount}` : "-"}
+                    {row.trialCount > 0 ? `+${formatDecimal(row.trialCount)}` : "-"}
                   </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold text-base">
-                    {row.totalMesin > 0 ? row.totalMesin : "-"}
+                    {row.totalMesin > 0 ? formatDecimal(row.totalMesin) : "-"}
                   </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center">
-                    {row.kebutuhanTotal > 0 ? row.kebutuhanTotal : "-"}
+                    {row.kebutuhanTotal > 0 ? formatDecimal(row.kebutuhanTotal) : "-"}
                   </td>
                   <td
                     className={`px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold ${row.gap < 0 ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-800" : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 text-emerald-600 dark:text-emerald-500"}`}
                   >
-                    {row.gap !== 0 ? row.gap : "0"}
+                    {formatSignedDecimal(row.gap)}
                   </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30 text-center">
                     {/* Empty cell under "Style" / "Line" */}
@@ -487,7 +488,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                       className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center text-slate-600 dark:text-slate-400 font-medium"
                     >
                       {row.lineRequirements[al.line] > 0
-                        ? row.lineRequirements[al.line]
+                        ? formatDecimal(row.lineRequirements[al.line])
                         : ""}
                     </td>
                   ))}
@@ -501,27 +502,27 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   Total
                 </td>
                 <td className="px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center">
-                  {tableData.totals.baseCount}
+                  {formatDecimal(tableData.totals.baseCount)}
                 </td>
                 <td className="text-red-700 dark:text-red-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center font-bold">
-                  {tableData.totals.pinjamCount > 0 ? `+${tableData.totals.pinjamCount}` : "0"}
+                  {tableData.totals.pinjamCount > 0 ? `+${formatDecimal(tableData.totals.pinjamCount)}` : "0"}
                 </td>
                 <td className="text-amber-700 dark:text-amber-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center font-bold">
-                  {tableData.totals.sewaCount > 0 ? `+${tableData.totals.sewaCount}` : "0"}
+                  {tableData.totals.sewaCount > 0 ? `+${formatDecimal(tableData.totals.sewaCount)}` : "0"}
                 </td>
                 <td className="text-indigo-700 dark:text-indigo-400 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center font-bold">
-                  {tableData.totals.trialCount > 0 ? `+${tableData.totals.trialCount}` : "0"}
+                  {tableData.totals.trialCount > 0 ? `+${formatDecimal(tableData.totals.trialCount)}` : "0"}
                 </td>
                 <td className="text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center">
-                  {tableData.totals.totalMesin}
+                  {formatDecimal(tableData.totals.totalMesin)}
                 </td>
                 <td className="text-slate-800 dark:text-slate-200 px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center">
-                  {tableData.totals.kebutuhanTotal}
+                  {formatDecimal(tableData.totals.kebutuhanTotal)}
                 </td>
                 <td
                   className={`px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
                 >
-                  {tableData.totals.gap}
+                  {formatSignedDecimal(tableData.totals.gap)}
                 </td>
                 <td className="px-3 py-3 border-r border-slate-300 dark:border-slate-600 bg-slate-200 dark:bg-slate-700 text-center"></td>
                 {activeLines.map((al) => (
@@ -530,7 +531,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                     className="px-3 py-3 border-r border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-center text-slate-800 dark:text-slate-200 font-bold"
                   >
                     {tableData.totals.lineRequirements[al.line] > 0
-                      ? tableData.totals.lineRequirements[al.line]
+                      ? formatDecimal(tableData.totals.lineRequirements[al.line])
                       : ""}
                   </td>
                 ))}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Printer, FileText } from 'lucide-react';
 import { MachineRequirementSummary, LineMachineMatrixRow } from '../../types/mrp';
+import { formatDecimal, formatSignedDecimal } from '../../utils/formatters';
 
 interface PrintableReportModalProps {
   isOpen: boolean;
@@ -95,7 +96,7 @@ export const PrintableReportModal: React.FC<PrintableReportModalProps> = ({
                 Total Required Sewing Machines
               </span>
               <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 print:text-black mt-1">
-                {totalRequired} units
+                {formatDecimal(totalRequired)} units
               </div>
             </div>
             <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50 dark:bg-slate-800/50 print:border-gray-400 print:bg-gray-50 transition-colors">
@@ -103,7 +104,7 @@ export const PrintableReportModal: React.FC<PrintableReportModalProps> = ({
                 Total Available in Plant
               </span>
               <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 print:text-black mt-1">
-                {totalAvailable} units
+                {formatDecimal(totalAvailable)} units
               </div>
             </div>
             <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50 dark:bg-slate-800/50 print:border-gray-400 print:bg-gray-50 transition-colors">
@@ -115,7 +116,7 @@ export const PrintableReportModal: React.FC<PrintableReportModalProps> = ({
                   totalShortage > 0 ? 'text-red-600 dark:text-red-400 print:text-red-600' : 'text-emerald-600 dark:text-emerald-400 print:text-green-600'
                 }`}
               >
-                {totalShortage > 0 ? `${totalShortage} units deficit` : 'Balanced (0 Shortage)'}
+                {totalShortage > 0 ? `${formatDecimal(totalShortage)} units deficit` : 'Balanced (0 Shortage)'}
               </div>
             </div>
           </div>
@@ -143,23 +144,23 @@ export const PrintableReportModal: React.FC<PrintableReportModalProps> = ({
                       {item.machine}
                     </td>
                     <td className="p-2 text-right font-bold border border-slate-200 dark:border-slate-700 print:border-gray-400">
-                      {item.required}
+                      {formatDecimal(item.required)}
                     </td>
                     <td className="p-2 text-right border border-slate-200 dark:border-slate-700 print:border-gray-400">
-                      {item.available}
+                      {formatDecimal(item.available)}
                     </td>
                     <td
                       className={`p-2 text-right font-bold border border-slate-200 dark:border-slate-700 print:border-gray-400 transition-colors ${
                         item.gap < 0 ? 'text-red-600 dark:text-red-400 print:text-red-600' : ''
                       }`}
                     >
-                      {item.gap > 0 ? `+${item.gap}` : item.gap}
+                      {formatSignedDecimal(item.gap)}
                     </td>
                     <td className="p-2 text-center font-bold border border-slate-200 dark:border-slate-700 print:border-gray-400">
                       {item.status}
                     </td>
                     <td className="p-2 text-right font-bold border border-slate-200 dark:border-slate-700 print:border-gray-400">
-                      {item.utilization}%
+                      {formatDecimal(item.utilization)}%
                     </td>
                   </tr>
                 ))}
@@ -204,11 +205,11 @@ export const PrintableReportModal: React.FC<PrintableReportModalProps> = ({
                         key={`print-cell-${machine}`}
                         className="p-2 text-right font-mono border border-slate-200 dark:border-slate-700 print:border-gray-400"
                       >
-                        {row.machines[machine] || '-'}
+                        {row.machines[machine] !== undefined ? formatDecimal(row.machines[machine]) : '-'}
                       </td>
                     ))}
                     <td className="p-2 text-right font-bold border border-slate-200 dark:border-slate-700 print:border-gray-400">
-                      {row.totalMachines}
+                      {formatDecimal(row.totalMachines)}
                     </td>
                   </tr>
                 ))}

@@ -2,6 +2,7 @@ import React from "react";
 import { Wrench, PackageCheck, AlertTriangle, Info } from "lucide-react";
 import { format } from "date-fns";
 import { MachineRequirementSummary } from "../../types/mrp";
+import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 
 interface KPICardsProps {
   summaryData: MachineRequirementSummary[];
@@ -49,13 +50,13 @@ export const KPICards: React.FC<KPICardsProps> = ({
         </div>
         <div className="flex items-center space-x-2">
           <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            {totalAvailable.toLocaleString()}
+            {formatDecimal(totalAvailable)}
           </div>
           {hasVariation && (
             <div className="group relative flex items-center">
               <Info className="w-5 h-5 text-blue-200 cursor-help" />
               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-slate-800 text-xs text-white rounded shadow-lg z-10 text-center">
-                Jumlah terendah dalam periode ini. Tertinggi: {totalMaxAvailable.toLocaleString()} mesin.
+                Jumlah terendah dalam periode ini. Tertinggi: {formatDecimal(totalMaxAvailable)} mesin.
                 <div className="absolute left-1/2 -translate-x-1/2 top-full border-4 border-transparent border-t-slate-800"></div>
               </div>
             </div>
@@ -79,7 +80,7 @@ export const KPICards: React.FC<KPICardsProps> = ({
           </div>
         </div>
         <div className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-          {totalRequired.toLocaleString()}
+          {formatDecimal(totalRequired)}
         </div>
         <div className="mt-auto pt-2">
           <p className="text-xs text-amber-100">
@@ -102,9 +103,7 @@ export const KPICards: React.FC<KPICardsProps> = ({
         </div>
         <div className="flex items-center space-x-2">
           <span className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-none">
-            {totalGap > 0
-              ? `+${totalGap.toLocaleString()}`
-              : totalGap.toLocaleString()}
+            {formatSignedDecimal(totalGap)}
           </span>
           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold mt-1 bg-white/20 text-white">
             {totalGap < 0 ? "Shortage" : totalGap > 0 ? "Surplus" : "Balanced"}

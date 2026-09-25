@@ -16,6 +16,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { MachineRequirementSummary, LineMachineMatrixRow } from "../../types/mrp";
+import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 
 interface OverallRequirementTableProps {
   data: MachineRequirementSummary[];
@@ -26,11 +27,7 @@ interface OverallRequirementTableProps {
 type SortField = "machine" | "required" | "available" | "gap" | "utilization";
 type TabType = "mesin" | "style";
 
-const formatNumber = (num: number | null | undefined): string => {
-  if (num === null || num === undefined || isNaN(num)) return "0";
-  const rounded = Math.round(num * 100) / 100;
-  return rounded.toString();
-};
+const formatNumber = (num: number | null | undefined): string => formatDecimal(num);
 
 export const OverallRequirementTable: React.FC<
   OverallRequirementTableProps
@@ -543,26 +540,26 @@ export const OverallRequirementTable: React.FC<
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200 text-base">
-                      {(item.baseCount ?? 0) + (item.pinjamCount || 0) + (item.sewaCount || 0) + (item.trialCount || 0)}
+                      {formatNumber((item.baseCount ?? 0) + (item.pinjamCount || 0) + (item.sewaCount || 0) + (item.trialCount || 0))}
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex flex-col items-center justify-center gap-1">
                         <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-slate-500 rounded-full shadow-sm leading-none w-max">
-                          {item.baseCount ?? 0} pringapus
+                          {formatNumber(item.baseCount ?? 0)} pringapus
                         </span>
                         {(item.pinjamCount || 0) > 0 && (
                           <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-red-500 rounded-full shadow-sm leading-none w-max">
-                            +{item.pinjamCount} pinjam
+                            +{formatNumber(item.pinjamCount)} pinjam
                           </span>
                         )}
                         {(item.sewaCount || 0) > 0 && (
                           <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-amber-500 rounded-full shadow-sm leading-none w-max">
-                            +{item.sewaCount} sewa
+                            +{formatNumber(item.sewaCount)} sewa
                           </span>
                         )}
                         {(item.trialCount || 0) > 0 && (
                           <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold text-white bg-indigo-500 rounded-full shadow-sm leading-none w-max">
-                            +{item.trialCount} trial
+                            +{formatNumber(item.trialCount)} trial
                           </span>
                         )}
                       </div>
@@ -580,7 +577,7 @@ export const OverallRequirementTable: React.FC<
                               : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
                         }`}
                       >
-                        {item.gap > 0 ? `+${formatNumber(item.gap)}` : formatNumber(item.gap)}
+                        {formatSignedDecimal(item.gap)}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -597,7 +594,7 @@ export const OverallRequirementTable: React.FC<
                           />
                         </div>
                         <span className={`font-bold text-xs ${textColor}`}>
-                          {item.utilization}%
+                          {formatNumber(item.utilization)}%
                         </span>
                       </div>
                     </td>

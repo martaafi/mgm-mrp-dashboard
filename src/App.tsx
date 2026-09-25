@@ -20,6 +20,7 @@ import {
   getMachineDrillDown,
   getRentalTrialAlerts,
   getAdjustedAvailabilityForDateRange,
+  getCurrentWeekRange,
 } from "./utils/mrpCalculations";
 import { exportMRPToExcel, exportSummaryToCSV } from "./utils/exportUtils";
 import { Header } from "./components/layout/Header";
@@ -154,10 +155,13 @@ export default function App() {
     return `${year}-${month}-${day}`;
   };
 
-  // Summary filters (Default: Today)
-  const [filters, setFilters] = useState<FilterState>({
-    startDate: getTodayStr(),
-    endDate: getTodayStr(),
+  // Summary filters (Default: Current Running Week)
+  const [filters, setFilters] = useState<FilterState>(() => {
+    const week = getCurrentWeekRange();
+    return {
+      startDate: week.startDate,
+      endDate: week.endDate,
+    };
   });
 
   // Chart / Analytics filters (Default: Today)
@@ -213,9 +217,10 @@ export default function App() {
   };
 
   const handleResetFilters = () => {
+    const week = getCurrentWeekRange();
     setFilters({
-      startDate: getTodayStr(),
-      endDate: getTodayStr(),
+      startDate: week.startDate,
+      endDate: week.endDate,
     });
   };
 
