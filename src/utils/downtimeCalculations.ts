@@ -92,12 +92,6 @@ export const filterDowntimeRecords = (
       return false;
     }
 
-    // Abaikan data jika tipe mesin kosong atau "unknown"
-    const machType = (r.prodMachType || "").trim().toLowerCase();
-    if (!machType || machType === "unknown" || machType === "-") {
-      return false;
-    }
-
     // Abaikan data dengan downtime aktual 0 (tidak ada downtime nyata)
     if (!r.downtimeAktual || r.downtimeAktual <= 0) {
       return false;
@@ -132,17 +126,15 @@ export const getDowntimeByMachineType = (
 
   records.forEach((r) => {
     const rawType = (r.prodMachType || "").trim();
-    if (!rawType || rawType.toLowerCase() === "unknown" || rawType === "-") return;
+    if (!rawType || rawType.toLowerCase() === "unknown" || rawType === "-")
+      return;
     const key = rawType;
     if (!map[key]) map[key] = { totalMinutes: 0, frequency: 0 };
     map[key].totalMinutes += r.downtimeAktual;
     map[key].frequency += 1;
   });
 
-  const grandTotal = Object.values(map).reduce(
-    (s, v) => s + v.totalMinutes,
-    0,
-  );
+  const grandTotal = Object.values(map).reduce((s, v) => s + v.totalMinutes, 0);
 
   return Object.entries(map)
     .map(([machineType, val]) => ({
@@ -174,10 +166,7 @@ export const getDowntimeByBrand = (
     map[key].frequency += 1;
   });
 
-  const grandTotal = Object.values(map).reduce(
-    (s, v) => s + v.totalMinutes,
-    0,
-  );
+  const grandTotal = Object.values(map).reduce((s, v) => s + v.totalMinutes, 0);
 
   return Object.entries(map)
     .map(([brand, val]) => ({
@@ -209,10 +198,7 @@ export const getDowntimeByLine = (
     map[key].frequency += 1;
   });
 
-  const grandTotal = Object.values(map).reduce(
-    (s, v) => s + v.totalMinutes,
-    0,
-  );
+  const grandTotal = Object.values(map).reduce((s, v) => s + v.totalMinutes, 0);
 
   return Object.entries(map)
     .map(([line, val]) => ({
@@ -294,7 +280,8 @@ const getISOWeek = (dt: Date): { year: number; week: number } => {
   const firstThursday = new Date(year, 0, 4);
   const firstDay = (firstThursday.getDay() + 6) % 7;
   firstThursday.setDate(firstThursday.getDate() - firstDay + 3);
-  const week = 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86400000));
+  const week =
+    1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86400000));
   return { year, week };
 };
 
@@ -409,8 +396,7 @@ export const getDowntimeKPIs = (records: DowntimeRecord[]): DowntimeKPIs => {
 
   return {
     totalDowntimeMinutes: Math.round(totalDowntimeMinutes * 100) / 100,
-    totalDowntimeHours:
-      Math.round((totalDowntimeMinutes / 60) * 100) / 100,
+    totalDowntimeHours: Math.round((totalDowntimeMinutes / 60) * 100) / 100,
     totalIncidents,
     avgDurationMinutes:
       totalIncidents > 0
@@ -432,7 +418,9 @@ export const getUniqueLines = (records: DowntimeRecord[]): string[] => {
       records
         .map((r) => (r.line || "").trim())
         .filter(
-          (l) => l !== "" && l.toUpperCase().startsWith(DOWNTIME_ALLOWED_LINE_PREFIX),
+          (l) =>
+            l !== "" &&
+            l.toUpperCase().startsWith(DOWNTIME_ALLOWED_LINE_PREFIX),
         ),
     ),
   ].sort();
