@@ -3,6 +3,7 @@ import {
   Layers,
   LayoutDashboard,
   TableProperties,
+  CalendarRange,
   Clock,
   BarChart2,
   Bell,
@@ -18,6 +19,7 @@ export type TabValue =
   | "preview"
   | "summary"
   | "detail"
+  | "planning"
   | "history"
   | "chart"
   | "downtime"
@@ -66,6 +68,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: "detail",
       label: "Detail Matriks",
       icon: <TableProperties className="w-5 h-5 shrink-0" />,
+    },
+    {
+      id: "planning",
+      label: "Planning Style",
+      icon: <CalendarRange className="w-5 h-5 shrink-0" />,
     },
     {
       id: "history",

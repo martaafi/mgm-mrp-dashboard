@@ -11,6 +11,8 @@ import {
   Sparkles,
   Wrench,
   CalendarDays,
+  CalendarRange,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   ProductionPlan,
@@ -34,6 +36,7 @@ import {
   getDowntimeKPIs,
 } from "../../utils/downtimeCalculations";
 import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
+import { getStyleLabels, isExcludedLine, isNoPlanning } from "./PlanningStyleDashboard";
 
 /* ------------------------------------------------------------------ */
 /*  Helper: Current ISO-week boundaries (Senin – Minggu)              */
@@ -223,6 +226,70 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
       ),
     [cleanPlans, requirements, adjustedAvailabilities],
   );
+
+  // Planning Style: Senin week berjalan s/d 1 bulan ke depan dari hari ini
+  const planningStyleStats = useMemo(() => {
+    const t = new Date();
+    const endD = new Date(t.getFullYear(), t.getMonth() + 1, t.getDate());
+    const endStr = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, "0")}-${String(endD.getDate()).padStart(2, "0")}`;
+    const startStr = currentWeek.startDate;
+
+    // line -> date -> styles
+    const byLine = new Map<string, Map<string, string[]>>();
+    plans.forEach((p) => {
+      if (!p.date || isSunday(p.date)) return;
+      if (p.date < startStr || p.date > endStr) return;
+      const line = (p.line || "").trim();
+      if (!line || isExcludedLine(line)) return;
+      const labels = getStyleLabels(p).filter((s) => !isNoPlanning(s));
+      if (labels.length === 0) return;
+      if (!byLine.has(line)) byLine.set(line, new Map());
+      const m = byLine.get(line)!;
+      const arr = m.get(p.date) || [];
+      labels.forEach((l) => {
+        if (!arr.includes(l)) arr.push(l);
+      });
+      m.set(p.date, arr);
+    });
+
+    const styles = new Set<string>();
+    const changes: { line: string; date: string; from: string; to: string }[] = [];
+    byLine.forEach((m, line) => {
+      const dates = Array.from(m.keys()).sort();
+      dates.forEach((d) => m.get(d)!.forEach((s) => styles.add(s)));
+      // Cari pergantian style mulai hari ini
+      for (let i = 1; i < dates.length; i++) {
+        const d = dates[i];
+        if (d < currentWeek.todayStr) continue;
+        const prev = m.get(dates[i - 1])!;
+        const cur = m.get(d)!;
+        const newStyles = cur.filter((s) => !prev.includes(s));
+        if (newStyles.length > 0) {
+          changes.push({
+            line,
+            date: d,
+            from: prev[prev.length - 1],
+            to: newStyles[newStyles.length - 1],
+          });
+          break; // hanya pergantian terdekat per line
+        }
+      }
+    });
+    changes.sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        a.line.localeCompare(b.line, undefined, { numeric: true }),
+    );
+
+    return {
+      startDate: startStr,
+      endDate: endStr,
+      activeLines: byLine.size,
+      totalStyles: styles.size,
+      changeCount: changes.length,
+      upcomingChanges: changes.slice(0, 4),
+    };
+  }, [plans, currentWeek]);
 
   const capacityStats = useMemo(() => {
     let totalAvail = 0;
@@ -751,6 +818,91 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
           {/* Action Link */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-1 transition-transform">
             <span>Buka Tab Detail Matriks</span>
+            <ArrowRight className="w-4 h-4 ml-1" />
+          </div>
+        </div>
+
+        {/* CARD: Planning Style (Senin week berjalan s/d 1 bulan ke depan) */}
+        <div
+          onClick={() => onNavigateTab("planning")}
+          className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-violet-400 dark:hover:border-violet-600 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between cursor-pointer relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-24 h-24 bg-violet-500/5 rounded-bl-full pointer-events-none group-hover:scale-110 transition-transform" />
+
+          <div>
+            {/* Card Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 border border-violet-100 dark:border-violet-800/50 group-hover:scale-105 transition-transform">
+                  <CalendarRange className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
+                    Planning Style
+                  </h3>
+                  <span className="text-xs text-slate-400 dark:text-slate-500 font-medium block leading-tight">
+                    Jadwal style per line 1 bulan ke depan
+                  </span>
+                </div>
+              </div>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                {formatWeekDateRange(planningStyleStats.startDate, planningStyleStats.endDate)}
+              </span>
+            </div>
+
+            {/* Metrics Snippet */}
+            <div className="grid grid-cols-2 gap-2.5 mb-4">
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium">Line Aktif</span>
+                <div className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                  {planningStyleStats.activeLines}{" "}
+                  <span className="text-xs font-normal text-slate-400">line</span>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <span className="text-[11px] text-slate-400 font-medium">Style Berjalan</span>
+                <div className="text-lg font-bold text-violet-600 dark:text-violet-400">
+                  {planningStyleStats.totalStyles}{" "}
+                  <span className="text-xs font-normal text-slate-400">style</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Pergantian Style Terdekat */}
+            <div className="space-y-1.5 mb-4">
+              <span className="text-xs text-slate-400 font-medium block">
+                Pergantian Style Terdekat ({planningStyleStats.changeCount} line):
+              </span>
+              {planningStyleStats.upcomingChanges.length > 0 ? (
+                <div className="space-y-1">
+                  {planningStyleStats.upcomingChanges.map((c) => (
+                    <div
+                      key={c.line}
+                      className="flex items-center gap-2 text-xs p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/40"
+                      title={`${c.line}: ${c.from} → ${c.to}`}
+                    >
+                      <span className="font-bold text-slate-700 dark:text-slate-300 shrink-0">{c.line}</span>
+                      <span className="flex items-center gap-1 min-w-0 flex-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        <ArrowRightLeft className="w-3 h-3 shrink-0 text-violet-500" />
+                        <span className="truncate">{c.to}</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold text-violet-600 dark:text-violet-400">
+                        {formatDateShort(c.date)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 italic">
+                  Tidak ada pergantian style dalam 1 bulan ke depan.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action Link */}
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs font-semibold text-violet-600 dark:text-violet-400 group-hover:translate-x-1 transition-transform">
+            <span>Buka Tab Planning Style</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </div>
         </div>

@@ -40,6 +40,8 @@ import { InitialReminderModal } from "./components/modals/InitialReminderModal";
 import { RentalAlertsDashboard } from "./components/dashboard/RentalAlertsDashboard";
 import { PreviewDashboard } from "./components/dashboard/PreviewDashboard";
 import { DowntimeDashboard } from "./components/dashboard/DowntimeDashboard";
+import { PlanningStyleDashboard } from "./components/dashboard/PlanningStyleDashboard";
+import { addMonths, format as formatDate, parseISO } from "date-fns";
 
 export default function App() {
   // 1. Core Data States
@@ -170,6 +172,24 @@ export default function App() {
     const today = getTodayStr();
     return { startDate: today, endDate: today };
   });
+
+  // Planning Style filters (Default: Senin week berjalan s/d 1 bulan ke depan dari hari ini)
+  const getDefaultPlanningRange = (): FilterState => {
+    const today = getTodayStr();
+    return {
+      startDate: getCurrentWeekRange().startDate,
+      endDate: formatDate(addMonths(parseISO(today), 1), "yyyy-MM-dd"),
+    };
+  };
+  const [planningFilters, setPlanningFilters] = useState<FilterState>(getDefaultPlanningRange);
+
+  const handlePlanningFilterChange = (key: keyof FilterState, value: string) => {
+    setPlanningFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleResetPlanningFilters = () => {
+    setPlanningFilters(getDefaultPlanningRange());
+  };
 
   // 3. Modal / Navigation States
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
@@ -506,7 +526,7 @@ export default function App() {
       {isFullscreen && (
         <div className="fixed top-3 right-3 z-50 flex items-center gap-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 rounded-xl px-2.5 py-1.5 shadow-lg transition-all">
           <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mr-1">
-            {activeTab === 'preview' ? 'Preview' : activeTab === 'summary' ? 'Summary' : activeTab === 'history' ? 'Plan History' : activeTab === 'chart' ? 'Analytics' : activeTab === 'downtime' ? 'Downtime' : activeTab === 'detail' ? 'Detail' : 'Alerts'}
+            {activeTab === 'preview' ? 'Preview' : activeTab === 'summary' ? 'Summary' : activeTab === 'history' ? 'Plan History' : activeTab === 'chart' ? 'Analytics' : activeTab === 'downtime' ? 'Downtime' : activeTab === 'detail' ? 'Detail' : activeTab === 'planning' ? 'Planning Style' : 'Alerts'}
           </span>
           <button
             onClick={toggleDarkMode}
@@ -604,6 +624,18 @@ export default function App() {
               initialDate={filters.startDate}
               initialEndDate={filters.endDate}
             />
+          )}
+
+          {activeTab === "planning" && (
+            <>
+              <FilterBar
+                filters={planningFilters}
+                onFilterChange={handlePlanningFilterChange}
+                onResetFilters={handleResetPlanningFilters}
+                lastUpdated={lastUpdated}
+              />
+              <PlanningStyleDashboard plans={cleanedPlans} filters={planningFilters} />
+            </>
           )}
 
           {activeTab === "history" && (
