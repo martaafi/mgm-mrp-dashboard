@@ -40,11 +40,13 @@ const SUB = 6;
 const DAY_WIDTH = 120; // px
 const LINE_COL_WIDTH = 72; // px
 
-export const isNoPlanning = (s: string) => s.trim().toUpperCase() === "NO PLANNING";
+export const isNoPlanning = (s: string) =>
+  s.trim().toUpperCase() === "NO PLANNING";
 
 // Line non-produksi (ACC, Skill Up, Tes/Test) tidak ditampilkan & tidak dihitung
 const EXCLUDED_LINE_PATTERN = /ACC|SKILL|TES/i;
-export const isExcludedLine = (line: string) => EXCLUDED_LINE_PATTERN.test(line || "");
+export const isExcludedLine = (line: string) =>
+  EXCLUDED_LINE_PATTERN.test(line || "");
 
 /**
  * Planning Style PPIC bisa berisi beberapa style dalam 1 hari, dipisah koma
@@ -157,7 +159,8 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
       for (let i = 0; i < ordered.length; i++) {
         const arr = ordered[i];
         if (arr.length < 2) continue;
-        const prev = i > 0 ? ordered[i - 1][ordered[i - 1].length - 1] : undefined;
+        const prev =
+          i > 0 ? ordered[i - 1][ordered[i - 1].length - 1] : undefined;
         const next = i < cells.length - 1 ? cells[i + 1][0] : undefined;
         if (next && arr.includes(next) && next !== prev) {
           arr.splice(arr.indexOf(next), 1);
@@ -215,7 +218,9 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
 
   const colorMap = useMemo(() => {
     const m = new Map<string, string>();
-    styleList.forEach((s, i) => m.set(s, STYLE_PALETTE[i % STYLE_PALETTE.length]));
+    styleList.forEach((s, i) =>
+      m.set(s, STYLE_PALETTE[i % STYLE_PALETTE.length]),
+    );
     return m;
   }, [styleList]);
 
@@ -225,11 +230,16 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
 
   const renderSegment = (line: string, seg: Segment, idx: number) => {
     const cellKey = `${line}-${idx}`;
-    const baseCls = "border-b border-r border-white dark:border-slate-950 p-0 align-middle text-center";
+    const baseCls =
+      "border-b border-r border-white dark:border-slate-950 p-0 align-middle text-center";
 
     if (seg.key === EMPTY) {
       return (
-        <td key={cellKey} colSpan={seg.span} className={`${baseCls} bg-slate-50/60 dark:bg-slate-900/40`} />
+        <td
+          key={cellKey}
+          colSpan={seg.span}
+          className={`${baseCls} bg-slate-50/60 dark:bg-slate-900/40`}
+        />
       );
     }
 
@@ -256,10 +266,14 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
       <td
         key={cellKey}
         colSpan={seg.span}
-        onClick={() => setHighlightStyle((prev) => (prev === seg.key ? null : seg.key))}
+        onClick={() =>
+          setHighlightStyle((prev) => (prev === seg.key ? null : seg.key))
+        }
         title={`${seg.key}\n${fmtShort(seg.startDate)}${seg.startDate !== seg.endDate ? ` – ${fmtShort(seg.endDate)}` : ""} (${dayCount} hari)`}
         className={`${baseCls} ${color} cursor-pointer transition-opacity ${dimmed ? "opacity-20" : ""} ${
-          active ? "outline outline-2 -outline-offset-2 outline-slate-800 dark:outline-white" : ""
+          active
+            ? "outline outline-2 -outline-offset-2 outline-slate-800 dark:outline-white"
+            : ""
         }`}
       >
         <div className="px-1.5 text-[10px] font-semibold leading-tight break-words line-clamp-3">
@@ -279,9 +293,10 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
         {[
           {
             label: "Rentang Tanggal",
-            value: dates.length > 0
-              ? `${format(parseISO(dates[0]), "dd MMM")} – ${format(parseISO(dates[dates.length - 1]), "dd MMM yyyy")}`
-              : "-",
+            value:
+              dates.length > 0
+                ? `${format(parseISO(dates[0]), "dd MMM")} – ${format(parseISO(dates[dates.length - 1]), "dd MMM yyyy")}`
+                : "-",
             sub: `${dates.length} hari kerja`,
             icon: <CalendarRange className="w-4 h-4" />,
             tone: "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30",
@@ -309,8 +324,12 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {k.label}
               </p>
-              <p className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1 truncate">{k.value}</p>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500">{k.sub}</p>
+              <p className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1 truncate">
+                {k.value}
+              </p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                {k.sub}
+              </p>
             </div>
             <div className={`p-2 rounded-lg ${k.tone}`}>{k.icon}</div>
           </div>
@@ -321,9 +340,12 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Planning Style per Line</h2>
+            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+              Planning Style per Line
+            </h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Sumber: Plan Dashboard (Planning Style PPIC). Hari dengan 2 style dibagi dua dalam satu kotak. Klik kotak untuk menyorot style.
+              Sumber: Plan Dashboard (Planning Style PPIC). Hari dengan 2 style
+              dibagi dua dalam satu kotak. Klik kotak untuk menyorot style.
             </p>
           </div>
           {highlightStyle && (
@@ -332,7 +354,9 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700"
             >
               <X className="w-3.5 h-3.5" />
-              <span className="max-w-[240px] truncate">Sorot: {highlightStyle}</span>
+              <span className="max-w-[240px] truncate">
+                Sorot: {highlightStyle}
+              </span>
             </button>
           )}
         </div>
@@ -387,8 +411,12 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
                             : "bg-slate-50 dark:bg-slate-800/95 text-slate-600 dark:text-slate-300"
                         }`}
                       >
-                        <div className="text-[10px] font-medium uppercase">{format(dt, "EEE")}</div>
-                        <div className="text-[11px] font-bold">{format(dt, "dd MMM")}</div>
+                        <div className="text-[10px] font-medium uppercase">
+                          {format(dt, "EEE")}
+                        </div>
+                        <div className="text-[11px] font-bold">
+                          {format(dt, "dd MMM")}
+                        </div>
                       </th>
                     );
                   })}
@@ -400,7 +428,9 @@ export const PlanningStyleDashboard: React.FC<PlanningStyleDashboardProps> = ({
                     <td className="sticky left-0 z-10 border-b border-r border-slate-200 dark:border-slate-700 px-3 font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900">
                       {line}
                     </td>
-                    {(segmentsByLine.get(line) || []).map((seg, idx) => renderSegment(line, seg, idx))}
+                    {(segmentsByLine.get(line) || []).map((seg, idx) =>
+                      renderSegment(line, seg, idx),
+                    )}
                   </tr>
                 ))}
               </tbody>

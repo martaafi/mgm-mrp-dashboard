@@ -38,8 +38,11 @@ import { DowntimeRecord } from "../../types/mrp";
 import { DateRangePicker } from "../filters/DateRangePicker";
 import {
   DowntimeFilterState,
+  DowntimeTrendPoint,
+  DowntimeWeeklyTrendPoint,
   filterDowntimeRecords,
   getDowntimeByMachineType,
+  getDowntimeTrendByDate,
   getDowntimeTrendByWeek,
   getTopErrors,
   getDowntimeKPIs,
@@ -138,22 +141,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
     [downtimeRecords, filters],
   );
 
-  // --- Filtered data without Date Filter (for Trend Chart & Downtime Log Table) ---
-  const filtersWithoutDate = useMemo<DowntimeFilterState>(
-    () => ({
-      ...filters,
-      startDate: "",
-      endDate: "",
-    }),
-    [filters.line, filters.machineType, filters.brand],
-  );
-
-  const recordsForTrendAndTable = useMemo(
-    () => filterDowntimeRecords(downtimeRecords, filtersWithoutDate),
-    [downtimeRecords, filtersWithoutDate],
-  );
-
-  // --- Aggregated data ---
+  // --- Aggregated data (all follow filteredRecords including Date Filter) ---
   const kpis = useMemo(
     () => getDowntimeKPIs(filteredRecords),
     [filteredRecords],
@@ -173,18 +161,32 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
       ),
     [byMachineType],
   );
-  const trendData = useMemo(
-    () => getDowntimeTrendByWeek(recordsForTrendAndTable),
-    [recordsForTrendAndTable],
+  const isDateFilterActive = Boolean(filters.startDate || filters.endDate);
+  const weeklyTrendData = useMemo(
+    () => (isDateFilterActive ? [] : getDowntimeTrendByWeek(filteredRecords)),
+    [isDateFilterActive, filteredRecords],
   );
+  const dailyTrendData = useMemo(
+    () =>
+      isDateFilterActive
+        ? getDowntimeTrendByDate(
+            filteredRecords,
+            filters.startDate,
+            filters.endDate,
+          )
+        : [],
+    [isDateFilterActive, filteredRecords, filters.startDate, filters.endDate],
+  );
+  const trendData: (DowntimeTrendPoint | DowntimeWeeklyTrendPoint)[] =
+    isDateFilterActive ? dailyTrendData : weeklyTrendData;
   const topErrors = useMemo(
     () => getTopErrors(filteredRecords, 8),
     [filteredRecords],
   );
 
-  // --- Table search + sort + pagination (exempt from date filter) ---
+  // --- Table search + sort + pagination (now follows all filters including Date) ---
   const tableData = useMemo(() => {
-    let data = [...recordsForTrendAndTable];
+    let data = [...filteredRecords];
 
     // Search
     if (searchQuery) {
@@ -349,22 +351,26 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
   // --- Custom Recharts Tooltip ---
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
-    const weekPayload = payload[0]?.payload;
+    const itemPayload = payload[0]?.payload;
     const fmtDayMonth = (ymd: string) => {
       const parts = String(ymd).split("-");
       return parts.length === 3 ? `${parts[2]}/${parts[1]}` : String(ymd);
     };
     const weekRange =
-      weekPayload?.weekStart && weekPayload?.weekEnd
-        ? `${fmtDayMonth(weekPayload.weekStart)}–${fmtDayMonth(weekPayload.weekEnd)}`
+      itemPayload?.weekStart && itemPayload?.weekEnd
+        ? `${fmtDayMonth(itemPayload.weekStart)}–${fmtDayMonth(itemPayload.weekEnd)}`
+        : null;
+    const dailySub =
+      itemPayload?.dayName && itemPayload?.date
+        ? `${itemPayload.dayName}, ${String(itemPayload.date).slice(0, 4)}`
         : null;
     return (
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl p-3 text-xs">
         <p className="font-semibold text-slate-700 dark:text-slate-200">
           {label}
-          {weekRange && (
+          {(weekRange || dailySub) && (
             <span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">
-              ({weekRange})
+              ({weekRange || dailySub})
             </span>
           )}
         </p>
@@ -406,67 +412,67 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
           </button>
         </div>
       ) : (
-      <div
-        className={`rounded-xl border px-4 py-3 flex items-center justify-between text-xs font-medium transition-colors ${
-          isDataFromAppsScript
-            ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400"
-            : isAppsScriptConfigured
-              ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300"
-              : "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-400"
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          {isDataFromAppsScript ? (
-            <Check className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          ) : isAppsScriptConfigured ? (
-            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          ) : (
-            <Info className="w-4 h-4 shrink-0 text-slate-500 dark:text-slate-400" />
-          )}
-          <span>
-            {isDataFromAppsScript
-              ? `Data diambil via Google Apps Script Web App (${downtimeRecords.length} baris terambil — Anti-Filter Mode)`
+        <div
+          className={`rounded-xl border px-4 py-3 flex items-center justify-between text-xs font-medium transition-colors ${
+            isDataFromAppsScript
+              ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400"
               : isAppsScriptConfigured
-                ? `Apps Script URL terpasang, namun fetch gagal/fallback ke GViz (${downtimeRecords.length} baris terambil). Pastikan deployment diset "Who has access: Anyone" dan URL berakhiran /exec.`
-                : `Data diambil via GViz (${downtimeRecords.length} baris terambil). Jika sheet difilter, data bisa tidak lengkap.`}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={DOWNTIME_GOOGLE_SHEET_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Buka Google Sheet Downtime (Juli s/d Sekarang)"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition-colors text-xs"
-          >
-            <ExternalLink className="w-3 h-3" /> Sheet Juli+
-          </a>
-          <a
-            href={DOWNTIME_HISTORICAL_GOOGLE_SHEET_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Buka Google Sheet Downtime (Januari s/d Juni)"
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition-colors text-xs"
-          >
-            <ExternalLink className="w-3 h-3" /> Sheet Jan-Jun (Line G)
-          </a>
-          <button
-            onClick={handleOpenAppsScriptModal}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
-          >
-            <Settings2 className="w-3 h-3" /> Apps Script Setup
-          </button>
-          {isAppsScriptConfigured && !isDataFromAppsScript && (
-            <button
-              onClick={() => onRefreshData?.()}
-              title="Coba ambil ulang via Apps Script (maks 4x percobaan)"
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300"
+                : "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-400"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {isDataFromAppsScript ? (
+              <Check className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            ) : isAppsScriptConfigured ? (
+              <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            ) : (
+              <Info className="w-4 h-4 shrink-0 text-slate-500 dark:text-slate-400" />
+            )}
+            <span>
+              {isDataFromAppsScript
+                ? `Data diambil via Google Apps Script Web App (${downtimeRecords.length} baris terambil — Anti-Filter Mode)`
+                : isAppsScriptConfigured
+                  ? `Apps Script URL terpasang, namun fetch gagal/fallback ke GViz (${downtimeRecords.length} baris terambil). Pastikan deployment diset "Who has access: Anyone" dan URL berakhiran /exec.`
+                  : `Data diambil via GViz (${downtimeRecords.length} baris terambil). Jika sheet difilter, data bisa tidak lengkap.`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={DOWNTIME_GOOGLE_SHEET_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Buka Google Sheet Downtime (Juli s/d Sekarang)"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition-colors text-xs"
             >
-              <RefreshCw className="w-3 h-3" /> Coba Lagi
+              <ExternalLink className="w-3 h-3" /> Sheet Juli+
+            </a>
+            <a
+              href={DOWNTIME_HISTORICAL_GOOGLE_SHEET_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Buka Google Sheet Downtime (Januari s/d Juni)"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/80 dark:bg-slate-800 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition-colors text-xs"
+            >
+              <ExternalLink className="w-3 h-3" /> Sheet Jan-Jun (Line G)
+            </a>
+            <button
+              onClick={handleOpenAppsScriptModal}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+            >
+              <Settings2 className="w-3 h-3" /> Apps Script Setup
             </button>
-          )}
+            {isAppsScriptConfigured && !isDataFromAppsScript && (
+              <button
+                onClick={() => onRefreshData?.()}
+                title="Coba ambil ulang via Apps Script (maks 4x percobaan)"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" /> Coba Lagi
+              </button>
+            )}
+          </div>
         </div>
-      </div>
       )}
 
       {/* Filter Bar */}
@@ -564,8 +570,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             <span className="text-sm font-normal text-slate-400 ml-1">jam</span>
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {formatDecimal(kpis.totalDowntimeMinutes, 0)}{" "}
-            menit
+            {formatDecimal(kpis.totalDowntimeMinutes, 0)} menit
           </div>
         </div>
 
@@ -619,8 +624,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             {kpis.topMachineType}
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            {formatDecimal(kpis.topMachineTypeMinutes, 0)}{" "}
-            menit
+            {formatDecimal(kpis.topMachineTypeMinutes, 0)} menit
           </div>
         </div>
 
@@ -703,9 +707,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                     fontSize={9}
                     fill="#94a3b8"
                     formatter={(v) =>
-                      !v || Number(v) === 0
-                        ? ""
-                        : formatDecimal(Number(v), 0)
+                      !v || Number(v) === 0 ? "" : formatDecimal(Number(v), 0)
                     }
                   />
                 </Bar>
@@ -772,9 +774,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                     fontSize={9}
                     fill="#94a3b8"
                     formatter={(v) =>
-                      !v || Number(v) === 0
-                        ? ""
-                        : formatDecimal(Number(v), 0)
+                      !v || Number(v) === 0 ? "" : formatDecimal(Number(v), 0)
                     }
                   />
                 </Bar>
@@ -841,9 +841,7 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                     fontSize={9}
                     fill="#94a3b8"
                     formatter={(v) =>
-                      !v || Number(v) === 0
-                        ? ""
-                        : formatDecimal(Number(v), 0)
+                      !v || Number(v) === 0 ? "" : formatDecimal(Number(v), 0)
                     }
                   />
                 </Bar>
@@ -861,16 +859,26 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
             <div className="flex items-center gap-2 mb-3 shrink-0">
               <TrendingUp className="w-4 h-4 shrink-0 text-cyan-500" />
               <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                Tren Downtime per Minggu
+                {isDateFilterActive
+                  ? "Tren Downtime Harian"
+                  : "Tren Downtime per Minggu"}
               </h3>
-              {trendData.length > 0 && (
+              {isDateFilterActive && dailyTrendData.length > 0 && (
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
-                  ({trendData[0].weekLabel} –{" "}
-                  {trendData[trendData.length - 1].weekLabel}
-                  {trendData[0].year !== trendData[trendData.length - 1].year
-                    ? ` • ${trendData[0].year}/${trendData[trendData.length - 1].year}`
-                    : ` • ${trendData[0].year}`}
-                  , {trendData.length} minggu)
+                  ({dailyTrendData[0].dateLabel} –{" "}
+                  {dailyTrendData[dailyTrendData.length - 1].dateLabel} •{" "}
+                  {dailyTrendData[dailyTrendData.length - 1].date.slice(0, 4)})
+                </span>
+              )}
+              {!isDateFilterActive && weeklyTrendData.length > 0 && (
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                  ({weeklyTrendData[0].weekLabel} –{" "}
+                  {weeklyTrendData[weeklyTrendData.length - 1].weekLabel}
+                  {weeklyTrendData[0].year !==
+                  weeklyTrendData[weeklyTrendData.length - 1].year
+                    ? ` • ${weeklyTrendData[0].year}/${weeklyTrendData[weeklyTrendData.length - 1].year}`
+                    : ` • ${weeklyTrendData[0].year}`}
+                  )
                 </span>
               )}
             </div>
@@ -887,14 +895,17 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                 </div>
                 <div className="flex-1 min-w-0 h-full w-full min-h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={trendData} margin={{ left: 0, right: 10, top: 10, bottom: 0 }}>
+                    <ComposedChart
+                      data={trendData}
+                      margin={{ left: 0, right: 10, top: 10, bottom: 0 }}
+                    >
                       <CartesianGrid
                         strokeDasharray="3 3"
                         stroke="currentColor"
                         className="text-slate-200 dark:text-slate-700"
                       />
                       <XAxis
-                        dataKey="weekLabel"
+                        dataKey={isDateFilterActive ? "dateLabel" : "weekLabel"}
                         tick={{ fontSize: 9 }}
                         angle={-90}
                         textAnchor="end"
@@ -996,24 +1007,70 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                   <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-800 shadow-xs">
                     <tr>
                       {[
-                        { key: "line", line1: "Line", line2: "", align: "text-left" },
-                        { key: "tanggal", line1: "Date", line2: "", align: "text-left" },
-                        { key: "downtimeStart", line1: "Start", line2: "Time", align: "text-left" },
-                        { key: "downtimeStop", line1: "End", line2: "Time", align: "text-left" },
-                        { key: "prodMachType", line1: "Mach", line2: "Type", align: "text-center" },
-                        { key: "prodMach", line1: "Mach", line2: "Brand", align: "text-left" },
-                        { key: "jamKerja", line1: "Work", line2: "Hours", align: "text-center" },
-                        { key: "downtimeAktual", line1: "Actual", line2: "Downtime", align: "text-center" },
+                        {
+                          key: "line",
+                          line1: "Line",
+                          line2: "",
+                          align: "text-left",
+                        },
+                        {
+                          key: "tanggal",
+                          line1: "Date",
+                          line2: "",
+                          align: "text-left",
+                        },
+                        {
+                          key: "downtimeStart",
+                          line1: "Start",
+                          line2: "Time",
+                          align: "text-left",
+                        },
+                        {
+                          key: "downtimeStop",
+                          line1: "End",
+                          line2: "Time",
+                          align: "text-left",
+                        },
+                        {
+                          key: "prodMachType",
+                          line1: "Mach",
+                          line2: "Type",
+                          align: "text-center",
+                        },
+                        {
+                          key: "prodMach",
+                          line1: "Mach",
+                          line2: "Brand",
+                          align: "text-left",
+                        },
+                        {
+                          key: "jamKerja",
+                          line1: "Work",
+                          line2: "Hours",
+                          align: "text-center",
+                        },
+                        {
+                          key: "downtimeAktual",
+                          line1: "Actual",
+                          line2: "Downtime",
+                          align: "text-center",
+                        },
                       ].map((col) => (
                         <th
                           key={col.key}
                           onClick={() => handleSort(col.key)}
                           className={`px-1.5 py-1.5 ${col.align} font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-tight cursor-pointer hover:text-slate-700 dark:hover:text-slate-200 select-none align-bottom`}
                         >
-                          <span className={`inline-flex items-center gap-0.5 ${col.align === "text-center" ? "justify-center" : "justify-start"} w-full`}>
+                          <span
+                            className={`inline-flex items-center gap-0.5 ${col.align === "text-center" ? "justify-center" : "justify-start"} w-full`}
+                          >
                             <span className="flex flex-col leading-tight">
-                              <span className="text-[10px] font-bold">{col.line1}</span>
-                              <span className="text-[9px] font-semibold opacity-75">{col.line2 || "\u00A0"}</span>
+                              <span className="text-[10px] font-bold">
+                                {col.line1}
+                              </span>
+                              <span className="text-[9px] font-semibold opacity-75">
+                                {col.line2 || "\u00A0"}
+                              </span>
                             </span>
                             <span className="shrink-0 mt-0.5">
                               <SortIcon col={col.key} />
@@ -1052,7 +1109,10 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                             </td>
                             <td className="px-1.5 py-1.5 text-slate-500 dark:text-slate-400 whitespace-nowrap text-left text-[10.5px]">
                               {r.downtimeStart
-                                ? r.downtimeStart.replace(/^\d+\/\d+\/\d+\s/, "")
+                                ? r.downtimeStart.replace(
+                                    /^\d+\/\d+\/\d+\s/,
+                                    "",
+                                  )
                                 : "-"}
                             </td>
                             <td className="px-1.5 py-1.5 text-slate-500 dark:text-slate-400 whitespace-nowrap text-left text-[10.5px]">
@@ -1069,7 +1129,9 @@ export const DowntimeDashboard: React.FC<DowntimeDashboardProps> = ({
                               {r.prodMach || "-"}
                             </td>
                             <td className="px-1.5 py-1.5 text-slate-600 dark:text-slate-400 whitespace-nowrap text-center text-[11px]">
-                              {typeof r.jamKerja === "number" ? formatDecimal(r.jamKerja, 0) : r.jamKerja}
+                              {typeof r.jamKerja === "number"
+                                ? formatDecimal(r.jamKerja, 0)
+                                : r.jamKerja}
                             </td>
                             <td className="px-1.5 py-1.5 whitespace-nowrap text-center">
                               <span

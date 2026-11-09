@@ -38,7 +38,9 @@ export interface DowntimeByLine {
 }
 
 export interface DowntimeTrendPoint {
-  date: string;
+  date: string; // YYYY-MM-DD
+  dateLabel: string; // e.g. "02 Nov" (tampil di sumbu X)
+  dayName: string; // e.g. "Senin"
   totalMinutes: number;
   totalHours: number;
   frequency: number;
@@ -218,9 +220,43 @@ export const getDowntimeByLine = (
     .sort((a, b) => b.totalMinutes - a.totalMinutes);
 };
 
+const SHORT_MONTHS_ID = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "Mei",
+  "Jun",
+  "Jul",
+  "Agu",
+  "Sep",
+  "Okt",
+  "Nov",
+  "Des",
+];
+
+const DAY_NAMES_ID = [
+  "Minggu",
+  "Senin",
+  "Selasa",
+  "Rabu",
+  "Kamis",
+  "Jumat",
+  "Sabtu",
+];
+
+/**
+ * Agregasi tren downtime harian (maksimal 2 bulan terakhir dari tanggal akhir).
+ * Hari kerja (Senin–Sabtu) tanpa kejadian tetap diisi 0 supaya garis tren kontinu;
+ * hari Minggu hanya ditampilkan jika ada kejadian downtime.
+ */
 export const getDowntimeTrendByDate = (
   records: DowntimeRecord[],
+  startDate?: string,
+  endDate?: string,
 ): DowntimeTrendPoint[] => {
+  if (records.length === 0) return [];
+
   const map: Record<string, { totalMinutes: number; frequency: number }> = {};
 
   records.forEach((r) => {
@@ -230,14 +266,49 @@ export const getDowntimeTrendByDate = (
     map[r.tanggal].frequency += 1;
   });
 
-  return Object.entries(map)
-    .map(([date, val]) => ({
-      date,
-      totalMinutes: Math.round(val.totalMinutes * 100) / 100,
-      totalHours: Math.round((val.totalMinutes / 60) * 100) / 100,
-      frequency: val.frequency,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const sortedDates = Object.keys(map).sort();
+  if (sortedDates.length === 0) return [];
+
+  const rawStart = startDate || sortedDates[0];
+  const rawEnd = endDate || sortedDates[sortedDates.length - 1];
+
+  let startDt = parseYMD(rawStart);
+  const endDt = parseYMD(rawEnd);
+  if (!startDt || !endDt || startDt.getTime() > endDt.getTime()) return [];
+
+  // Batasi maksimal 2 bulan terakhir dari tanggal akhir (endDt)
+  const minStartDt = new Date(
+    endDt.getFullYear(),
+    endDt.getMonth() - 2,
+    endDt.getDate(),
+  );
+  if (startDt.getTime() < minStartDt.getTime()) {
+    startDt = minStartDt;
+  }
+
+  const result: DowntimeTrendPoint[] = [];
+  const cursor = new Date(startDt);
+  while (cursor.getTime() <= endDt.getTime()) {
+    const ymd = toYMD(cursor);
+    const val = map[ymd] || { totalMinutes: 0, frequency: 0 };
+    const isSun = cursor.getDay() === 0;
+
+    if (!isSun || val.frequency > 0) {
+      const dd = String(cursor.getDate()).padStart(2, "0");
+      const mon = SHORT_MONTHS_ID[cursor.getMonth()];
+      result.push({
+        date: ymd,
+        dateLabel: `${dd} ${mon}`,
+        dayName: DAY_NAMES_ID[cursor.getDay()],
+        totalMinutes: Math.round(val.totalMinutes * 100) / 100,
+        totalHours: Math.round((val.totalMinutes / 60) * 100) / 100,
+        frequency: val.frequency,
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return result;
 };
 
 // --- Week helpers (ISO 8601, Senin = awal minggu) ---
