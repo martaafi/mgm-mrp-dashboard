@@ -145,6 +145,149 @@ export const filterProductionPlans = (
 };
 
 /**
+ * Normalizes machine name for substitution matching
+ */
+export const normalizeMachineKey = (name: string): string => {
+  return name.trim().toUpperCase().replace(/\s+/g, " ");
+};
+
+/**
+ * Applies machine substitution rules:
+ * 1. OVD group: OVD1 (+ puller), OVD2, OVD3 (Mutual pooling - anyone with surplus can cover deficits)
+ * 2. OL group: OL3 <- OL4 <- OL5 (Hierarchical cascade - OL4 covers OL3, OL5 covers OL3 and/or OL4)
+ */
+export const applyMachineSubstitution = (
+  items: MachineRequirementSummary[]
+): MachineRequirementSummary[] => {
+  const mapByName = new Map<string, MachineRequirementSummary>();
+  items.forEach((item) => {
+    mapByName.set(normalizeMachineKey(item.machine), {
+      ...item,
+      cover: 0,
+      coverDetails: [],
+      netGap: item.gap,
+    });
+  });
+
+  const getByPattern = (pattern: RegExp): MachineRequirementSummary | undefined => {
+    for (const [key, val] of mapByName.entries()) {
+      if (pattern.test(key)) return val;
+    }
+    return undefined;
+  };
+
+  // 1. Group OVD (Mutual Pooling / Saling Menutupi)
+  const ovdItems: MachineRequirementSummary[] = [];
+  mapByName.forEach((item, key) => {
+    if (key.startsWith("OVD")) {
+      ovdItems.push(item);
+    }
+  });
+
+  if (ovdItems.length > 0) {
+    const deficits = ovdItems
+      .filter((m) => (m.netGap ?? m.gap) < 0)
+      .sort((a, b) => (a.netGap ?? a.gap) - (b.netGap ?? b.gap));
+    const surpluses = ovdItems
+      .filter((m) => (m.netGap ?? m.gap) > 0)
+      .sort((a, b) => (b.netGap ?? b.gap) - (a.netGap ?? a.gap));
+
+    for (const def of deficits) {
+      let needed = Math.abs(def.netGap ?? def.gap);
+      for (const sur of surpluses) {
+        const availableSurplus = sur.netGap ?? sur.gap;
+        if (availableSurplus <= 0 || needed <= 0) continue;
+
+        const transfer = Math.min(needed, availableSurplus);
+        if (transfer > 0) {
+          needed -= transfer;
+          def.netGap = (def.netGap ?? def.gap) + transfer;
+          def.cover = (def.cover || 0) + transfer;
+          if (!def.coverDetails) def.coverDetails = [];
+          def.coverDetails.push({ type: "in", machine: sur.machine, count: transfer });
+
+          sur.netGap = availableSurplus - transfer;
+          sur.cover = (sur.cover || 0) - transfer;
+          if (!sur.coverDetails) sur.coverDetails = [];
+          sur.coverDetails.push({ type: "out", machine: def.machine, count: transfer });
+        }
+      }
+    }
+  }
+
+  // 2. Group OL (Cascade: OL3 <- OL4 <- OL5)
+  const ol3 = getByPattern(/^OL\s*3\b/i);
+  const ol4 = getByPattern(/^OL\s*4\b/i);
+  const ol5 = getByPattern(/^OL\s*5\b/i);
+
+  const transferUnits = (
+    receiver: MachineRequirementSummary,
+    provider: MachineRequirementSummary
+  ) => {
+    const recNet = receiver.netGap ?? receiver.gap;
+    const provNet = provider.netGap ?? provider.gap;
+    if (recNet < 0 && provNet > 0) {
+      const needed = Math.abs(recNet);
+      const transfer = Math.min(needed, provNet);
+      if (transfer > 0) {
+        receiver.netGap = recNet + transfer;
+        receiver.cover = (receiver.cover || 0) + transfer;
+        if (!receiver.coverDetails) receiver.coverDetails = [];
+        receiver.coverDetails.push({
+          type: "in",
+          machine: provider.machine,
+          count: transfer,
+        });
+
+        provider.netGap = provNet - transfer;
+        provider.cover = (provider.cover || 0) - transfer;
+        if (!provider.coverDetails) provider.coverDetails = [];
+        provider.coverDetails.push({
+          type: "out",
+          machine: receiver.machine,
+          count: transfer,
+        });
+      }
+    }
+  };
+
+  // Step 2a: OL3 dicover oleh OL4
+  if (ol3 && ol4) {
+    transferUnits(ol3, ol4);
+  }
+
+  // Step 2b: Sisa defisit OL3 dicover oleh OL5
+  if (ol3 && ol5 && (ol3.netGap ?? ol3.gap) < 0) {
+    transferUnits(ol3, ol5);
+  }
+
+  // Step 2c: Defisit OL4 dicover oleh OL5
+  if (ol4 && ol5 && (ol4.netGap ?? ol4.gap) < 0) {
+    transferUnits(ol4, ol5);
+  }
+
+  // Update status final
+  mapByName.forEach((item) => {
+    const net = item.netGap ?? item.gap;
+    const originalGap = item.gap;
+
+    if (net < 0) {
+      item.status = "Shortage";
+    } else if (originalGap < 0 && net >= 0) {
+      item.status = "Covered";
+    } else if (net === 0) {
+      item.status = "Balanced";
+    } else {
+      item.status = "Available";
+    }
+  });
+
+  return items.map(
+    (orig) => mapByName.get(normalizeMachineKey(orig.machine)) || orig
+  );
+};
+
+/**
  * Calculates overall sewing machine requirements across all active filtered production plans.
  * If a line runs multiple styles in a single day, the last style in the planning data is used.
  */
@@ -306,8 +449,11 @@ export const calculateMachineRequirements = (
     });
   });
 
+  // Apply substitution / cover logic (OVD group mutual pooling, OL group cascade)
+  const substitutedResult = applyMachineSubstitution(result);
+
   // Sort by required descending as default
-  return result.sort((a, b) => b.required - a.required);
+  return substitutedResult.sort((a, b) => b.required - a.required);
 };
 
 /**

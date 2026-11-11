@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import { RentalTrialRecord, RentalTrialAlert } from "../../types/mrp";
 import { getRentalTrialAlerts } from "../../utils/mrpCalculations";
+import {
+  RentalMachinesModal,
+  RentalKPIModalCategory,
+} from "../modals/RentalMachinesModal";
 
 interface RentalAlertsDashboardProps {
   rentalTrialRecords: RentalTrialRecord[];
@@ -44,6 +48,10 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+
+  // State untuk modal list mesin per KPI
+  const [selectedKPICategory, setSelectedKPICategory] =
+    useState<RentalKPIModalCategory | null>(null);
   const totalPages = Math.ceil(filteredTableAlerts.length / itemsPerPage);
   const paginatedAlerts = filteredTableAlerts.slice(
     (currentPage - 1) * itemsPerPage,
@@ -172,7 +180,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
                 {criticalCount}
               </div>
               <div className="text-[10px] font-semibold text-red-600/70 dark:text-red-400/70 uppercase tracking-wider">
-                Masa Sewa/Trial ≤3 hari
+                Jumlah Mesin dengan Masa Sewa/Trial ≤3 hari
               </div>
             </div>
           </div>
@@ -186,7 +194,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
                 {warningCount}
               </div>
               <div className="text-[10px] font-semibold text-amber-600/70 dark:text-amber-400/70 uppercase tracking-wider">
-                Masa Sewa/Trial Sisa 4-7 hari
+                Jumlah Mesin dengan Masa Sewa/Trial Sisa 4-7 hari
               </div>
             </div>
           </div>
@@ -200,7 +208,7 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
                 {expiredCount}
               </div>
               <div className="text-[10px] font-semibold text-slate-500/70 dark:text-slate-400/70 uppercase tracking-wider">
-                Masa Sewa/Trial Sudah Selesai (3 hari lalu)
+                Jumlah Mesin Sudah Selesai Sewa/Trial (3 hari lalu)
               </div>
             </div>
           </div>
@@ -251,50 +259,78 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
 
       {/* Total rental/trial machines info */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 sm:p-5 transition-colors">
-        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
-          Informasi Keseluruhan Mesin Sewa & Trial
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+            Informasi Keseluruhan Mesin Sewa & Trial
+          </h3>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium hidden sm:inline">
+            Klik kartu untuk melihat rincian mesin
+          </span>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <div className="bg-slate-50 dark:bg-slate-800/30 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-slate-800 dark:text-slate-200">
+          <button
+            type="button"
+            onClick={() => setSelectedKPICategory("all")}
+            className="group bg-slate-50 dark:bg-slate-800/30 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700/60 rounded-xl p-3 text-center transition-all cursor-pointer text-left sm:text-center"
+            title="Klik untuk melihat semua mesin sewa & trial"
+          >
+            <div className="text-lg font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
               {rentalTrialRecords.length}
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider group-hover:text-indigo-500 dark:group-hover:text-indigo-400/80 transition-colors">
               Total Mesin
             </div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-800/30 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedKPICategory("sewa")}
+            className="group bg-slate-50 dark:bg-slate-800/30 hover:bg-amber-50/60 dark:hover:bg-amber-950/30 border border-transparent hover:border-amber-300 dark:hover:border-amber-700/60 rounded-xl p-3 text-center transition-all cursor-pointer text-left sm:text-center"
+            title="Klik untuk melihat daftar mesin sewa"
+          >
+            <div className="text-lg font-bold text-amber-600 dark:text-amber-400 group-hover:scale-105 transition-transform">
               {
                 rentalTrialRecords.filter((r) =>
                   r.remark.toLowerCase().includes("sewa"),
                 ).length
               }
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider group-hover:text-amber-600 dark:group-hover:text-amber-400/80 transition-colors">
               Mesin Sewa
             </div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-800/30 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedKPICategory("trial")}
+            className="group bg-slate-50 dark:bg-slate-800/30 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 border border-transparent hover:border-indigo-300 dark:hover:border-indigo-700/60 rounded-xl p-3 text-center transition-all cursor-pointer text-left sm:text-center"
+            title="Klik untuk melihat daftar mesin trial"
+          >
+            <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform">
               {
                 rentalTrialRecords.filter((r) =>
                   r.remark.toLowerCase().includes("trial"),
                 ).length
               }
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider">
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider group-hover:text-indigo-600 dark:group-hover:text-indigo-400/80 transition-colors">
               Mesin Trial
             </div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-800/30 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedKPICategory("no_deadline")}
+            className="group bg-slate-50 dark:bg-slate-800/30 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/30 border border-transparent hover:border-emerald-300 dark:hover:border-emerald-700/60 rounded-xl p-3 text-center transition-all cursor-pointer text-left sm:text-center"
+            title="Klik untuk melihat mesin yang belum ada batas waktu"
+          >
+            <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform">
               {rentalTrialRecords.filter((r) => !r.tglSelesai).length}
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider">
-              Belum Ada Batas Waktu
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold tracking-wider group-hover:text-emerald-600 dark:group-hover:text-emerald-400/80 transition-colors">
+              Belum Ada Tenggat Waktu Selesai Sewa/Trial
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -469,6 +505,16 @@ export const RentalAlertsDashboard: React.FC<RentalAlertsDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal Detail Mesin Berdasarkan KPI yang Diklik */}
+      {selectedKPICategory && (
+        <RentalMachinesModal
+          isOpen={true}
+          onClose={() => setSelectedKPICategory(null)}
+          category={selectedKPICategory}
+          records={rentalTrialRecords}
+        />
+      )}
     </div>
   );
 };

@@ -946,13 +946,17 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
 
               <div className="space-y-2 my-auto">
                 {topCriticalMachines.map((m, idx) => {
-                  const isShortage = m.gap < 0;
+                  const net = m.netGap !== undefined ? m.netGap : m.gap;
+                  const isCovered = m.status === "Covered";
+                  const isShortage = !isCovered && net < 0;
                   const utilPercent = Math.min(m.utilization, 150);
                   const barColor = isShortage
                     ? "bg-red-500 dark:bg-red-500"
-                    : m.utilization >= 80
-                      ? "bg-amber-500 dark:bg-amber-500"
-                      : "bg-emerald-500 dark:bg-emerald-500";
+                    : isCovered
+                      ? "bg-sky-500 dark:bg-sky-500"
+                      : m.utilization >= 80
+                        ? "bg-amber-500 dark:bg-amber-500"
+                        : "bg-emerald-500 dark:bg-emerald-500";
 
                   return (
                     <div key={idx} className="space-y-1">
@@ -967,12 +971,16 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
                           className={`px-1.5 py-0.5 text-[10px] font-bold rounded whitespace-nowrap shrink-0 ${
                             isShortage
                               ? "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/50"
-                              : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
+                              : isCovered
+                                ? "bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/50"
+                                : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
                           }`}
                         >
                           {isShortage
-                            ? `Shortage ${formatSignedDecimal(m.gap)}`
-                            : "Aman"}
+                            ? `Shortage ${formatSignedDecimal(net)}`
+                            : isCovered
+                              ? `Covered (${formatSignedDecimal(m.gap)})`
+                              : "Aman"}
                         </span>
                       </div>
                       <div className="text-slate-500 dark:text-slate-400 text-[11px]">

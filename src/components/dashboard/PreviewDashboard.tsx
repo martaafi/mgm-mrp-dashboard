@@ -316,8 +316,8 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
       totalAvail > 0 ? ((totalReq / totalAvail) * 100).toFixed(1) : "0";
 
     const topShortages = [...machineRequirements]
-      .filter((m) => m.gap < 0)
-      .sort((a, b) => a.gap - b.gap)
+      .filter((m) => (m.netGap !== undefined ? m.netGap : m.gap) < 0)
+      .sort((a, b) => (a.netGap ?? a.gap) - (b.netGap ?? b.gap))
       .slice(0, 3);
 
     return {
@@ -710,7 +710,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                       key={m.machine}
                       className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/50"
                     >
-                      {m.machine} ({formatSignedDecimal(m.gap)})
+                      {m.machine} ({formatSignedDecimal(m.netGap !== undefined ? m.netGap : m.gap)})
                     </span>
                   ))}
                 </div>
@@ -971,7 +971,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
                 </span>
                 <span className="font-semibold text-red-500">
                   {capacityStats.topShortages[0]
-                    ? `${capacityStats.topShortages[0].machine} (${formatSignedDecimal(capacityStats.topShortages[0].gap)})`
+                    ? `${capacityStats.topShortages[0].machine} (${formatSignedDecimal(capacityStats.topShortages[0].netGap !== undefined ? capacityStats.topShortages[0].netGap : capacityStats.topShortages[0].gap)})`
                     : "Tidak ada"}
                 </span>
               </div>

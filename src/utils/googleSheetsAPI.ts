@@ -215,6 +215,7 @@ export const fetchRentalTrialData = async (): Promise<RentalTrialRecord[]> => {
     const jenis = (row[2] || "").toString().trim();
     const entryDate = parseDateString(row[3] || "");
     const tglSelesai = parseDateString(row[4] || "");
+    const tglKeluar = parseDateString(row[5] || "");
     const invoice = (row[6] || "").toString().trim();
     const brand = (row[7] || "").toString().trim();
     const namaMesin = (row[8] || "").toString().trim();
@@ -230,6 +231,7 @@ export const fetchRentalTrialData = async (): Promise<RentalTrialRecord[]> => {
       jenis,
       entryDate,
       tglSelesai,
+      tglKeluar,
       invoice,
       brand,
       namaMesin,

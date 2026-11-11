@@ -24,7 +24,14 @@ interface OverallRequirementTableProps {
   onSelectMachine: (machineType: string) => void;
 }
 
-type SortField = "machine" | "required" | "available" | "gap" | "utilization";
+type SortField =
+  | "machine"
+  | "required"
+  | "available"
+  | "gap"
+  | "cover"
+  | "netGap"
+  | "utilization";
 type TabType = "mesin" | "style";
 
 const formatNumber = (num: number | null | undefined): string => formatDecimal(num);
@@ -72,8 +79,17 @@ export const OverallRequirementTable: React.FC<
         item.machine.toLowerCase().includes(searchTerm.toLowerCase()),
       )
       .sort((a, b) => {
-        const valA = a[sortField];
-        const valB = b[sortField];
+        let valA: any = a[sortField];
+        let valB: any = b[sortField];
+
+        if (sortField === "cover") {
+          valA = a.cover ?? 0;
+          valB = b.cover ?? 0;
+        } else if (sortField === "netGap") {
+          valA = a.netGap !== undefined ? a.netGap : a.gap;
+          valB = b.netGap !== undefined ? b.netGap : b.gap;
+        }
+
         if (typeof valA === "string" && typeof valB === "string") {
           return sortOrder === "asc"
             ? valA.localeCompare(valB)
@@ -85,17 +101,12 @@ export const OverallRequirementTable: React.FC<
       });
   }, [data, searchTerm, sortField, sortOrder]);
 
-  // Shortage machine lookup for fast matching
+  // Shortage machine lookup for fast matching (only real shortage after cover)
   const shortageMachineMap = useMemo(() => {
     const map = new Map<string, MachineRequirementSummary>();
     data.forEach((item) => {
-      const available =
-        (item.baseCount ?? 0) +
-        (item.pinjamCount || 0) +
-        (item.sewaCount || 0) +
-        (item.trialCount || 0);
-      const gap = item.gap !== undefined ? item.gap : available - item.required;
-      if (item.status === "Shortage" || gap < 0) {
+      const net = item.netGap !== undefined ? item.netGap : item.gap;
+      if (item.status === "Shortage" || net < 0) {
         map.set(item.machine.trim().toUpperCase(), item);
       }
     });
@@ -289,8 +300,18 @@ export const OverallRequirementTable: React.FC<
   }, [filteredStyleData]);
 
   // Status badge style helper
-  const getStatusBadge = (status: "Available" | "Balanced" | "Shortage") => {
+  const getStatusBadge = (status: "Available" | "Balanced" | "Shortage" | "Covered") => {
     switch (status) {
+      case "Covered":
+        return (
+          <span
+            className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/50 shadow-xs"
+            title="Aman: Kekurangan tertutupi oleh substitusi mesin lain"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 mr-1" />
+            <span>Covered</span>
+          </span>
+        );
       case "Shortage":
         return (
           <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/50">
@@ -457,13 +478,50 @@ export const OverallRequirementTable: React.FC<
                     )}
                   </button>
                 </th>
-                <th className="py-3 px-4 text-right">
+                <th className="py-3 px-3 text-right">
                   <button
                     onClick={() => handleSort("gap")}
-                    className="flex items-center justify-end space-x-1 ml-auto hover:text-slate-900 transition-colors"
+                    className="flex items-center justify-end space-x-1 ml-auto hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
+                    title="Selisih fisik murni (Available - Required)"
                   >
-                    <span>Gap</span>
+                    <span>Gap Asli</span>
                     {sortField === "gap" ? (
+                      sortOrder === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-indigo-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-indigo-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3" />
+                    )}
+                  </button>
+                </th>
+                <th className="py-3 px-3 text-center min-w-[140px]">
+                  <button
+                    onClick={() => handleSort("cover")}
+                    className="flex items-center justify-center space-x-1 mx-auto hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
+                    title="Alokasi cover/substitusi antar-mesin (OVD & OL)"
+                  >
+                    <span>Cover / Substitusi</span>
+                    {sortField === "cover" ? (
+                      sortOrder === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-indigo-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-indigo-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3" />
+                    )}
+                  </button>
+                </th>
+                <th className="py-3 px-3 text-right">
+                  <button
+                    onClick={() => handleSort("netGap")}
+                    className="flex items-center justify-end space-x-1 ml-auto hover:text-slate-900 dark:hover:text-slate-200 transition-colors"
+                    title="Gap efektif setelah memperhitungkan cover (Gap Asli + Cover)"
+                  >
+                    <span>Net Gap</span>
+                    {sortField === "netGap" ? (
                       sortOrder === "asc" ? (
                         <ArrowUp className="w-3 h-3 text-indigo-600" />
                       ) : (
@@ -567,7 +625,8 @@ export const OverallRequirementTable: React.FC<
                     <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
                       {formatNumber(item.required)}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-bold">
+                    {/* Gap Asli */}
+                    <td className="py-3.5 px-3 text-right font-bold">
                       <span
                         className={`px-2 py-0.5 rounded-md ${
                           item.gap < 0
@@ -576,9 +635,82 @@ export const OverallRequirementTable: React.FC<
                               ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
                               : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
                         }`}
+                        title="Gap fisik murni: Available - Required"
                       >
                         {formatSignedDecimal(item.gap)}
                       </span>
+                    </td>
+
+                    {/* Cover / Substitusi */}
+                    <td className="py-3.5 px-3 text-center">
+                      {item.cover && item.cover !== 0 ? (
+                        <div className="inline-flex flex-col items-center">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-xs font-bold border ${
+                              item.cover > 0
+                                ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                            }`}
+                            title={
+                              item.coverDetails && item.coverDetails.length > 0
+                                ? item.coverDetails
+                                    .map(
+                                      (d) =>
+                                        `${d.type === "in" ? "Menerima" : "Memberikan"} ${d.count} unit ${
+                                          d.type === "in" ? "dari" : "ke"
+                                        } ${d.machine}`
+                                    )
+                                    .join("\n")
+                                : undefined
+                            }
+                          >
+                            {item.cover > 0 ? `+${item.cover}` : `${item.cover}`}
+                          </span>
+                          {item.coverDetails && item.coverDetails.length > 0 && (
+                            <div className="flex flex-col items-center mt-1 space-y-0.5">
+                              {item.coverDetails.map((d, idx) => (
+                                <span
+                                  key={idx}
+                                  className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight whitespace-nowrap"
+                                >
+                                  {d.type === "in" ? "dari" : "ke"}{" "}
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                    {d.machine}
+                                  </span>{" "}
+                                  <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                                    ({d.type === "in" ? `+${d.count}` : `-${d.count}`})
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 dark:text-slate-600 font-medium">-</span>
+                      )}
+                    </td>
+
+                    {/* Net Gap */}
+                    <td className="py-3.5 px-3 text-right font-bold">
+                      {(() => {
+                        const net = item.netGap !== undefined ? item.netGap : item.gap;
+                        return (
+                          <span
+                            className={`px-2 py-0.5 rounded-md ${
+                              net < 0
+                                ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800/50"
+                                : item.status === "Covered"
+                                  ? "bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800/50"
+                                  : net === 0
+                                    ? "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                                    : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50"
+                            }`}
+                            title={`Net Gap: ${formatSignedDecimal(net)} (setelah cover)`}
+                          >
+                            {formatSignedDecimal(net)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       {getStatusBadge(item.status)}
@@ -869,12 +1001,16 @@ export const OverallRequirementTable: React.FC<
                                                 (machineData.trialCount || 0)
                                               : 0;
                                             const gap = available - (machineData?.required || count);
-                                            const isShortage = gap < 0 || machineData?.status === "Shortage";
+                                            const isCovered = machineData?.status === "Covered";
+                                            const effectiveGap = machineData?.netGap !== undefined ? machineData.netGap : gap;
+                                            const isShortage = !isCovered && (effectiveGap < 0 || machineData?.status === "Shortage");
 
                                             let mRowBg =
                                               "hover:bg-slate-100/60 dark:hover:bg-slate-700/40 transition-colors";
                                             if (isShortage) {
                                               mRowBg += " bg-red-50/60 dark:bg-red-950/25";
+                                            } else if (isCovered) {
+                                              mRowBg += " bg-sky-50/40 dark:bg-sky-950/20";
                                             }
 
                                             return (
@@ -884,7 +1020,7 @@ export const OverallRequirementTable: React.FC<
                                                     {isShortage && (
                                                       <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
                                                     )}
-                                                    <span className={isShortage ? "text-red-700 dark:text-red-300 font-bold" : ""}>
+                                                    <span className={isShortage ? "text-red-700 dark:text-red-300 font-bold" : isCovered ? "text-sky-700 dark:text-sky-300 font-medium" : ""}>
                                                       {machine}
                                                     </span>
                                                   </div>
@@ -899,10 +1035,17 @@ export const OverallRequirementTable: React.FC<
                                                   className={`px-4 py-2.5 text-center font-bold ${
                                                     isShortage
                                                       ? "text-red-600 dark:text-red-400"
+                                                      : isCovered
+                                                      ? "text-sky-600 dark:text-sky-400"
                                                       : "text-emerald-600 dark:text-emerald-400"
                                                   }`}
                                                 >
-                                                  {gap > 0 ? `+${formatNumber(gap)}` : formatNumber(gap)}
+                                                  {effectiveGap > 0 ? `+${formatNumber(effectiveGap)}` : formatNumber(effectiveGap)}
+                                                  {isCovered && (
+                                                    <span className="text-[10px] text-slate-400 block font-normal">
+                                                      (asli: {formatNumber(machineData?.gap ?? gap)})
+                                                    </span>
+                                                  )}
                                                 </td>
                                                 <td className="px-4 py-2.5 text-center">
                                                   {machineData

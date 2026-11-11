@@ -60,7 +60,13 @@ export interface MachineAvailability {
   variationDetails?: AvailabilityVariation[];
 }
 
-export type GapStatus = "Available" | "Balanced" | "Shortage";
+export type GapStatus = "Available" | "Balanced" | "Shortage" | "Covered";
+
+export interface MachineCoverDetail {
+  type: "in" | "out"; // "in" = menerima bantuan cover, "out" = memberikan bantuan cover
+  machine: string;    // nama mesin donor/penerima
+  count: number;      // jumlah unit yang dialokasikan
+}
 
 export interface MachineRequirementSummary {
   machine: string;
@@ -68,7 +74,10 @@ export interface MachineRequirementSummary {
   available: number;
   maxAvailable?: number; // Maximum available if there is variation in a range
   variationDetails?: AvailabilityVariation[];
-  gap: number; // available - required
+  gap: number; // Gap fisik asli (available - required)
+  cover?: number; // Total alokasi cover (+ jika menerima, - jika memberi)
+  coverDetails?: MachineCoverDetail[];
+  netGap?: number; // Gap akhir setelah memperhitungkan cover (gap + cover)
   status: GapStatus;
   utilization: number; // (required / available) * 100
   utilizationLevel: "low" | "medium" | "high"; // low <80%, medium 80-95%, high >95%
@@ -154,6 +163,7 @@ export interface RentalTrialRecord {
   jenis: string;           // Col C: JENIS (internal code, e.g. "SN/M", "BTC/M")
   entryDate: string;       // Col D: ENTRY DATE (YYYY-MM-DD) — start of rental/trial
   tglSelesai: string;      // Col E: TGL SELESAI (YYYY-MM-DD) — end of rental/trial, empty = still active
+  tglKeluar?: string;      // Col F: TGL KELUAR (YYYY-MM-DD) — actual return/exit date
   brand: string;           // Col H: BRAND
   namaMesin: string;       // Col I: NAMA MESIN
   tipeMesin: string;       // Col J: TIPE MESIN

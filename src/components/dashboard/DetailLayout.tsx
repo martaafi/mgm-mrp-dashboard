@@ -6,8 +6,9 @@ import {
   MachineRequirementPerStyle,
   MachineAvailability,
   RentalTrialRecord,
+  MachineCoverDetail,
 } from "../../types/mrp";
-import { getAdjustedAvailabilityForDateRange, isSunday } from "../../utils/mrpCalculations";
+import { getAdjustedAvailabilityForDateRange, isSunday, normalizeMachineKey, applyMachineSubstitution } from "../../utils/mrpCalculations";
 import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 import { DateRangePicker } from "../filters/DateRangePicker";
 
@@ -242,14 +243,43 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
           totalMesin,
           kebutuhanTotal,
           gap,
+          cover: 0 as number,
+          coverDetails: [] as MachineCoverDetail[],
+          netGap: gap,
           lineRequirements,
         };
       });
 
-    // Sort by gap ascending (most negative first), then by machine name
+    // Apply machine substitution (OVD mutual pooling + OL cascade)
+    // Build a temporary MachineRequirementSummary array just for substitution calculation
+    const tempSummary = rows.map((r) => ({
+      machine: r.machine,
+      required: r.kebutuhanTotal,
+      available: r.totalMesin,
+      gap: r.gap,
+      status: r.gap < 0 ? ("Shortage" as const) : r.gap === 0 ? ("Balanced" as const) : ("Available" as const),
+      utilization: r.totalMesin > 0 ? (r.kebutuhanTotal / r.totalMesin) * 100 : 0,
+      utilizationLevel: (r.totalMesin > 0 ? (r.kebutuhanTotal / r.totalMesin) * 100 : 0) > 95 ? ("high" as const) : (r.totalMesin > 0 ? (r.kebutuhanTotal / r.totalMesin) * 100 : 0) >= 80 ? ("medium" as const) : ("low" as const),
+      linesCount: 0,
+    }));
+
+    const substituted = applyMachineSubstitution(tempSummary);
+
+    // Map substitution results back to rows
+    const subMap = new Map(substituted.map((s) => [normalizeMachineKey(s.machine), s]));
+    rows.forEach((r) => {
+      const sub = subMap.get(normalizeMachineKey(r.machine));
+      if (sub) {
+        r.cover = sub.cover || 0;
+        r.coverDetails = sub.coverDetails || [];
+        r.netGap = sub.netGap ?? r.gap;
+      }
+    });
+
+    // Sort by netGap ascending (most negative first), then by machine name
     rows.sort((a, b) => {
-      if (a.gap !== b.gap) {
-        return a.gap - b.gap;
+      if (a.netGap !== b.netGap) {
+        return a.netGap - b.netGap;
       }
       return a.machine.localeCompare(b.machine);
     });
@@ -263,6 +293,8 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
       totalMesin: rows.reduce((sum, r) => sum + r.totalMesin, 0),
       kebutuhanTotal: Math.round(rows.reduce((sum, r) => sum + r.kebutuhanTotal, 0) * 100) / 100,
       gap: Math.round(rows.reduce((sum, r) => sum + r.gap, 0) * 100) / 100,
+      cover: rows.reduce((sum, r) => sum + r.cover, 0),
+      netGap: Math.round(rows.reduce((sum, r) => sum + r.netGap, 0) * 100) / 100,
       lineRequirements: {} as Record<string, number>,
     };
 
@@ -398,9 +430,24 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   </th>
                   <th
                     rowSpan={2}
-                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-16 min-w-[64px] text-center align-middle"
+                    className="bg-emerald-600 dark:bg-emerald-800 px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 w-20 min-w-[80px] text-center align-middle leading-tight whitespace-normal"
+                    title="Selisih fisik murni (Available - Required)"
                   >
-                    Gap
+                    Gap Asli
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-sky-600 dark:bg-sky-800 px-3 py-3 border-r border-b border-sky-500/50 dark:border-sky-700 w-24 min-w-[96px] text-center align-middle leading-tight whitespace-normal"
+                    title="Alokasi cover/substitusi antar-mesin (OVD & OL)"
+                  >
+                    Cover / Substitusi
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="bg-sky-600 dark:bg-sky-800 px-3 py-3 border-r border-b border-sky-500/50 dark:border-sky-700 w-20 min-w-[80px] text-center align-middle leading-tight whitespace-normal"
+                    title="Gap efektif setelah memperhitungkan cover (Gap Asli + Cover)"
+                  >
+                    Net Gap
                   </th>
                 <th className="px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 bg-emerald-700 dark:bg-emerald-900 w-16 text-center align-middle">
                   Style
@@ -479,6 +526,43 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   >
                     {formatSignedDecimal(row.gap)}
                   </td>
+                  <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center">
+                    {row.cover !== 0 ? (
+                      <div className="inline-flex flex-col items-center">
+                        <span
+                          className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold border ${
+                            row.cover > 0
+                              ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                          }`}
+                        >
+                          {row.cover > 0 ? `+${row.cover}` : `${row.cover}`}
+                        </span>
+                        {row.coverDetails.length > 0 && (
+                          <div className="flex flex-col items-center mt-0.5">
+                            {row.coverDetails.map((d, idx) => (
+                              <span key={idx} className="text-[9px] text-slate-400 dark:text-slate-500 leading-tight">
+                                {d.type === "in" ? "dari" : "ke"} {d.machine} ({d.type === "in" ? `+${d.count}` : `-${d.count}`})
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-slate-300 dark:text-slate-600">-</span>
+                    )}
+                  </td>
+                  <td
+                    className={`px-3 py-3 border-r border-slate-200 dark:border-slate-700 text-center font-bold ${
+                      row.netGap < 0
+                        ? "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-800"
+                        : row.gap < 0 && row.netGap >= 0
+                          ? "bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-300 group-hover:bg-sky-200 dark:group-hover:bg-sky-800"
+                          : "bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800 text-emerald-600 dark:text-emerald-500"
+                    }`}
+                  >
+                    {formatSignedDecimal(row.netGap)}
+                  </td>
                   <td className="px-3 py-3 border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30 text-center">
                     {/* Empty cell under "Style" / "Line" */}
                   </td>
@@ -523,6 +607,14 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                   className={`px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center ${tableData.totals.gap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
                 >
                   {formatSignedDecimal(tableData.totals.gap)}
+                </td>
+                <td className="px-3 py-3 border-r border-slate-300 dark:border-slate-600 bg-slate-200 dark:bg-slate-700 text-center text-xs text-slate-500 dark:text-slate-400">
+                  -
+                </td>
+                <td
+                  className={`px-3 py-3 border-r border-slate-300 dark:border-slate-600 text-center ${tableData.totals.netGap < 0 ? "bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-300" : "bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-400"}`}
+                >
+                  {formatSignedDecimal(tableData.totals.netGap)}
                 </td>
                 <td className="px-3 py-3 border-r border-slate-300 dark:border-slate-600 bg-slate-200 dark:bg-slate-700 text-center"></td>
                 {activeLines.map((al) => (

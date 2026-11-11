@@ -10,7 +10,9 @@ export const exportMRPToExcel = (
     'Machine Code': item.machine,
     'Required Machines': item.required,
     'Available Machines': item.available,
-    'Gap (Available - Required)': item.gap,
+    'Gap Asli': item.gap,
+    'Cover / Substitusi': item.cover || 0,
+    'Net Gap': item.netGap !== undefined ? item.netGap : item.gap,
     'Status': item.status,
     'Utilization (%)': `${item.utilization}%`,
     'Active Lines Count': item.linesCount,
@@ -20,13 +22,14 @@ export const exportMRPToExcel = (
 
   // Set column widths
   wsSummary['!cols'] = [
-    { wch: 16 },
-    { wch: 35 },
     { wch: 18 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 20 },
+    { wch: 15 },
+    { wch: 15 },
     { wch: 18 },
-    { wch: 25 },
-    { wch: 12 },
-    { wch: 16 },
     { wch: 18 },
   ];
 
@@ -68,7 +71,9 @@ export const exportSummaryToCSV = (summaryData: MachineRequirementSummary[]) => 
       Machine: item.machine,
       Required: item.required,
       Available: item.available,
-      Gap: item.gap,
+      'Gap Asli': item.gap,
+      'Cover / Substitusi': item.cover || 0,
+      'Net Gap': item.netGap !== undefined ? item.netGap : item.gap,
       Status: item.status,
       'Utilization %': item.utilization,
     }))
