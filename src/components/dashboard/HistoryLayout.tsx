@@ -2656,7 +2656,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         )
                                         .map(
                                           (d) =>
-                                            `${d.machine} ${formatDecimal(d.count)}`,
+                                            `${d.machine} ${formatSignedDecimal(d.count)}`,
                                         )
                                         .join(", ");
 
@@ -2714,14 +2714,11 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                               </div>
                                               <div
                                                 title={tooltip}
-                                                className={`max-w-full text-[9px] font-semibold leading-tight break-words cursor-help ${
-                                                  coverValue > 0
-                                                    ? "text-blue-600 dark:text-blue-300"
-                                                    : "text-amber-600 dark:text-amber-300"
-                                                }`}
+                                                className="max-w-full text-[9px] font-normal leading-tight break-words cursor-help text-slate-400 dark:text-slate-500"
                                               >
-                                                {formatSignedDecimal(coverValue)}{" "}
-                                                {coverValue > 0 ? "←" : "→"}{" "}
+                                                {coverValue > 0
+                                                  ? "dari "
+                                                  : "ke "}
                                                 {detailText}
                                               </div>
                                             </div>
@@ -2861,14 +2858,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 = gap tanpa cover → net gap
                               </span>
                               <span className="inline-flex items-center gap-1">
-                                <span className="rounded bg-blue-50 px-1 py-[1px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                                  +13 ← OL4 12, OL5 1
+                                <span className="rounded bg-slate-100 px-1 py-[1px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                  dari OL4 +12, OL5 +1
                                 </span>
                                 = cover diterima
                               </span>
                               <span className="inline-flex items-center gap-1">
-                                <span className="rounded bg-amber-50 px-1 py-[1px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                  −12 → OL3 12
+                                <span className="rounded bg-slate-100 px-1 py-[1px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                  ke OL3 +12
                                 </span>
                                 = cover diberikan
                               </span>
