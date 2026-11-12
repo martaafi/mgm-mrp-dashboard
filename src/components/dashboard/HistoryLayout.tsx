@@ -36,13 +36,17 @@ import {
   SnapshotRecord,
   MachineRequirementPerStyle,
   MachineAvailability,
+  MachineRequirementSummary,
+  MachineCoverDetail,
   RentalTrialRecord,
 } from "../../types/mrp";
 import {
   calculateMachineRequirements,
+  buildScenarioPlansFromSnapshots,
   getAdjustedAvailabilityForDateRange,
   isSunday,
   getCurrentWeekRange,
+  normalizeMachineKey,
 } from "../../utils/mrpCalculations";
 import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 import { DateRangePicker } from "../filters/DateRangePicker";
@@ -458,6 +462,97 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     }
   };
 
+  /**
+   * Ringkasan kebutuhan mesin per minggu untuk dua skenario (sebelum vs
+   * sesudah perubahan). Memakai `calculateMachineRequirements` supaya
+   * cover/substitusi (OVD, OL4->OL3, OL5->OL3 + cap whitelist) dihitung
+   * persis seperti tab Summary — per periode minggu, bukan per style.
+   */
+  const weekScenarioData = useMemo(() => {
+    const historyStartStr = getHistoryStartStr();
+    const scopedSnapshots = snapshots.filter(
+      (s) => s.planningDate >= historyStartStr && !isSunday(s.planningDate),
+    );
+
+    const snapshotsByWeek: Record<string, SnapshotRecord[]> = {};
+    scopedSnapshots.forEach((s) => {
+      const weekLabel = getWeekLabel(s.planningDate);
+      if (!weekLabel) return;
+      if (!snapshotsByWeek[weekLabel]) snapshotsByWeek[weekLabel] = [];
+      snapshotsByWeek[weekLabel].push(s);
+    });
+
+    const result = new Map<
+      string,
+      {
+        dates: string[];
+        weeklyAvailabilities: MachineAvailability[];
+        changedSnapshots: SnapshotRecord[];
+        lastByKey: Map<string, MachineRequirementSummary>;
+        updateByKey: Map<string, MachineRequirementSummary>;
+      }
+    >();
+
+    const toMap = (items: MachineRequirementSummary[]) => {
+      const map = new Map<string, MachineRequirementSummary>();
+      items.forEach((item) =>
+        map.set(normalizeMachineKey(item.machine), item),
+      );
+      return map;
+    };
+
+    Object.entries(snapshotsByWeek).forEach(([weekLabel, weekSnapshots]) => {
+      const dates = [...new Set(weekSnapshots.map((s) => s.planningDate))].sort();
+      if (dates.length === 0) return;
+
+      const minDate = dates[0];
+      const maxDate = dates[dates.length - 1];
+      const weeklyAvailabilities = getAdjustedAvailabilityForDateRange(
+        minDate,
+        maxDate,
+        availabilities,
+        rentalTrialRecords,
+      );
+
+      const lastPlans = buildScenarioPlansFromSnapshots(weekSnapshots, "last");
+      const updatePlans = buildScenarioPlansFromSnapshots(
+        weekSnapshots,
+        "update",
+      );
+
+      const lastSummary = calculateMachineRequirements(
+        lastPlans,
+        requirements,
+        weeklyAvailabilities,
+        ol5CoverStyles,
+      );
+      const updateSummary = calculateMachineRequirements(
+        updatePlans,
+        requirements,
+        weeklyAvailabilities,
+        ol5CoverStyles,
+      );
+
+      result.set(weekLabel, {
+        dates,
+        weeklyAvailabilities,
+        changedSnapshots: weekSnapshots.filter(
+          (s) => s.isMachineStyleChanged,
+        ),
+        lastByKey: toMap(lastSummary),
+        updateByKey: toMap(updateSummary),
+      });
+    });
+
+    return result;
+  }, [
+    snapshots,
+    requirements,
+    availabilities,
+    rentalTrialRecords,
+    ol5CoverStyles,
+  ]);
+
   // Build weekly comparison chart data
   // Logic: For each day, SUM machine requirements across all lines (simultaneous).
   //        For each week, take the MAX daily total (peak demand).
@@ -522,10 +617,14 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         available: number;
         shortageAlerts: {
           machine: string;
-          type: "RED" | "ORANGE" | "SLATE";
+          type: "RED" | "ORANGE" | "SLATE" | "COVERED";
           lastReq?: number;
           updateReq?: number;
           availCount?: number;
+          lastNet?: number;
+          updateNet?: number;
+          cover?: number;
+          coverDetails?: MachineCoverDetail[];
         }[];
       }
     > = {};
@@ -554,123 +653,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       );
     });
 
-    // Step 3: Detect shortage alerts per week
-    // For each week, check if update > last AND update > available for any machine
-    const weekDates: Record<string, string[]> = {};
-    Object.keys(dailyMap).forEach((date) => {
-      const weekLabel = getWeekLabel(date);
-      if (!weekLabel) return;
-      if (!weekDates[weekLabel]) weekDates[weekLabel] = [];
-      weekDates[weekLabel].push(date);
-    });
-
-    Object.entries(weekDates).forEach(([weekLabel, dates]) => {
-      if (!weekMap[weekLabel]) return;
-
-      // Find snapshots in this week that have machine style changes
-      const weekSnapshots = futureSnapshots.filter(
-        (s) => dates.includes(s.planningDate) && s.isMachineStyleChanged,
-      );
-
-      // Per-machine daily analysis for shortage detection
-      const machineMaxUpdate: Record<string, number> = {};
-      const machineMaxLast: Record<string, number> = {};
-
-      dates.forEach((date) => {
-        const daySnapshots = futureSnapshots.filter(
-          (s) => s.planningDate === date,
-        );
-        const machineDayUpdate: Record<string, number> = {};
-        const machineDayLast: Record<string, number> = {};
-
-        daySnapshots.forEach((s) => {
-          const updateReqs = requirements.filter(
-            (r) => r.style === s.updateMachineStyle,
-          );
-          const lastReqs = requirements.filter(
-            (r) => r.style === s.lastMachineStyle,
-          );
-
-          updateReqs.forEach((r) => {
-            machineDayUpdate[r.jenisMesin] =
-              (machineDayUpdate[r.jenisMesin] || 0) + r.kebutuhanTotal;
-          });
-          lastReqs.forEach((r) => {
-            machineDayLast[r.jenisMesin] =
-              (machineDayLast[r.jenisMesin] || 0) + r.kebutuhanTotal;
-          });
-        });
-
-        // Take max across days for each machine
-        Object.entries(machineDayUpdate).forEach(([machine, count]) => {
-          machineMaxUpdate[machine] = Math.max(
-            machineMaxUpdate[machine] || 0,
-            count,
-          );
-        });
-        Object.entries(machineDayLast).forEach(([machine, count]) => {
-          machineMaxLast[machine] = Math.max(
-            machineMaxLast[machine] || 0,
-            count,
-          );
-        });
-      });
-
-      // Check if any machine is in shortage or became a shortage
-      const minDate =
-        dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : "";
-      const maxDate =
-        dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : "";
-
-      const weeklyAvailabilities =
-        minDate && maxDate
-          ? getAdjustedAvailabilityForDateRange(
-              minDate,
-              maxDate,
-              availabilities,
-              rentalTrialRecords,
-            )
-          : availabilities;
-
-      if (weekSnapshots.length > 0) {
-        Object.entries(machineMaxUpdate).forEach(([machine, updateCount]) => {
-          const lastCount = machineMaxLast[machine] || 0;
-          const avail = weeklyAvailabilities.find(
-            (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
-          );
-          const availCount = avail ? avail.jumlahMesin : 0;
-
-          if (avail && updateCount > availCount) {
-            let alertType = "";
-            if (lastCount <= availCount) {
-              alertType = "RED"; // Awalnya ga shortage, jadi shortage
-            } else if (updateCount > lastCount) {
-              alertType = "ORANGE"; // Shortage bertambah
-            } else if (updateCount === lastCount) {
-              alertType = "SLATE"; // Shortage tetap
-            }
-
-            if (alertType) {
-              if (
-                !weekMap[weekLabel].shortageAlerts.some(
-                  (a) => a.machine === machine,
-                )
-              ) {
-                weekMap[weekLabel].shortageAlerts.push({
-                  machine,
-                  type: alertType as "RED" | "ORANGE" | "SLATE",
-                  lastReq: lastCount,
-                  updateReq: updateCount,
-                  availCount: availCount,
-                });
-              }
-            }
-          }
-        });
-      }
-    });
-
-    // Step 4: Available line for filtered machine or all machines
+    // Step 3: Detect shortage alerts per week (cover-aware / net gap).
+    // Sumber angka sama dengan tabel kanan (weekScenarioData), sehingga
+    // status di grafik dan tabel tidak pernah bertentangan.
     const allRequiredMachinesForChart = new Set<string>();
     futureSnapshots.forEach((s) => {
       requirements
@@ -681,24 +666,73 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         .forEach((r) => allRequiredMachinesForChart.add(r.jenisMesin));
     });
 
-    Object.keys(weekMap).forEach((w) => {
-      const dates = weekDates[w] || [];
-      const minDate =
-        dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : "";
-      const maxDate =
-        dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : "";
+    Object.keys(weekMap).forEach((weekLabel) => {
+      const weekData = weekScenarioData.get(weekLabel);
+      if (!weekData) return;
 
-      const weeklyAvailabilities =
-        minDate && maxDate
-          ? getAdjustedAvailabilityForDateRange(
-              minDate,
-              maxDate,
-              availabilities,
-              rentalTrialRecords,
+      const { weeklyAvailabilities, lastByKey, updateByKey } = weekData;
+
+      // Alert hanya relevan pada minggu yang punya perubahan style mesin.
+      if (weekData.changedSnapshots.length > 0) {
+        const machineKeys = new Set([
+          ...lastByKey.keys(),
+          ...updateByKey.keys(),
+        ]);
+
+        machineKeys.forEach((key) => {
+          const lastSummary = lastByKey.get(key);
+          const updateSummary = updateByKey.get(key);
+          if (!updateSummary) return;
+
+          const available = updateSummary.available;
+          const lastNet = lastSummary
+            ? (lastSummary.netGap ?? lastSummary.gap)
+            : available;
+          const updateNet = updateSummary.netGap ?? updateSummary.gap;
+          const updatePhysicalGap = updateSummary.gap;
+
+          let alertType: "RED" | "ORANGE" | "SLATE" | "COVERED" | "" = "";
+
+          if (updateNet < 0) {
+            if (lastNet >= 0) {
+              alertType = "RED"; // Tidak shortage -> menjadi shortage (setelah cover)
+            } else if (updateNet < lastNet) {
+              alertType = "ORANGE"; // Shortage bertambah
+            } else {
+              alertType = "SLATE"; // Shortage tetap
+            }
+          } else if (
+            updatePhysicalGap < 0 &&
+            (updateSummary.cover ?? 0) > 0
+          ) {
+            alertType = "COVERED"; // Defisit fisik tertutup cover/substitusi
+          }
+
+          if (!alertType) return;
+          if (
+            weekMap[weekLabel].shortageAlerts.some(
+              (a) => a.machine === updateSummary.machine,
             )
-          : availabilities;
+          ) {
+            return;
+          }
 
-      let availCount = 0;
+          weekMap[weekLabel].shortageAlerts.push({
+            machine: updateSummary.machine,
+            type: alertType,
+            lastReq: lastSummary?.required ?? 0,
+            updateReq: updateSummary.required,
+            availCount: available,
+            lastNet,
+            updateNet,
+            cover: updateSummary.cover ?? 0,
+            coverDetails: updateSummary.coverDetails ?? [],
+          });
+        });
+      }
+
+      // Step 4: Available line for filtered machine or all machines
+      let availCount: number;
       if (chartMachineFilter !== "ALL") {
         const avail = weeklyAvailabilities.find(
           (a) =>
@@ -710,7 +744,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
           .filter((a) => allRequiredMachinesForChart.has(a.jenisMesin))
           .reduce((sum, a) => sum + (a.jumlahMesin || 0), 0);
       }
-      weekMap[w].available = availCount;
+      weekMap[weekLabel].available = availCount;
     });
 
     // Step 5: Sort weeks and build output
@@ -817,10 +851,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   }, [
     snapshots,
     requirements,
-    availabilities,
     chartMachineFilter,
     selectedSnapshot,
-    rentalTrialRecords,
+    weekScenarioData,
   ]);
 
   // Auto-select current week (week berjalan) or first available week when chart data is available
@@ -838,112 +871,65 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     }
   }, [weeklyComparisonData.chartData, selectedChartWeek]);
 
-  // Compute per-machine breakdown for the selected week
+  // Compute per-machine breakdown for the selected week.
+  // Angka sudah cover-aware: `oldGap`/`newGap` = net gap setelah substitusi,
+  // sedangkan `oldPhysicalGap`/`newPhysicalGap` = gap fisik murni.
   const selectedWeekMachineData = useMemo(() => {
     if (!selectedChartWeek) return [];
 
-    // Get snapshots for the selected week (exclude Sundays)
-    const weekSnapshots = snapshots.filter(
-      (s) =>
-        getWeekLabel(s.planningDate) === selectedChartWeek &&
-        !isSunday(s.planningDate),
-    );
+    const weekData = weekScenarioData.get(selectedChartWeek);
+    if (!weekData) return [];
 
-    // Get unique dates in the selected week (exclude Sundays)
-    const weekDates = [
-      ...new Set(weekSnapshots.map((s) => s.planningDate)),
-    ].sort();
-
-    if (weekDates.length === 0) return [];
-
-    // For each date, compute per-machine requirements (sum across all lines)
-    // Then take MAX across days in the week
-    const machineMaxLast: Record<string, number> = {};
-    const machineMaxUpdate: Record<string, number> = {};
-
-    weekDates.forEach((date) => {
-      const daySnapshots = weekSnapshots.filter((s) => s.planningDate === date);
-      const machineDayLast: Record<string, number> = {};
-      const machineDayUpdate: Record<string, number> = {};
-
-      daySnapshots.forEach((s) => {
-        const lastReqs = requirements.filter(
-          (r) => r.style === s.lastMachineStyle,
-        );
-        const updateReqs = requirements.filter(
-          (r) => r.style === s.updateMachineStyle,
-        );
-
-        lastReqs.forEach((r) => {
-          machineDayLast[r.jenisMesin] =
-            (machineDayLast[r.jenisMesin] || 0) + r.kebutuhanTotal;
-        });
-        updateReqs.forEach((r) => {
-          machineDayUpdate[r.jenisMesin] =
-            (machineDayUpdate[r.jenisMesin] || 0) + r.kebutuhanTotal;
-        });
-      });
-
-      Object.entries(machineDayLast).forEach(([machine, count]) => {
-        machineMaxLast[machine] = Math.max(machineMaxLast[machine] || 0, count);
-      });
-      Object.entries(machineDayUpdate).forEach(([machine, count]) => {
-        machineMaxUpdate[machine] = Math.max(
-          machineMaxUpdate[machine] || 0,
-          count,
-        );
-      });
-    });
-
-    const minDate =
-      weekDates.length > 0 ? weekDates.reduce((a, b) => (a < b ? a : b)) : "";
-    const maxDate =
-      weekDates.length > 0 ? weekDates.reduce((a, b) => (a > b ? a : b)) : "";
-
-    const weeklyAvailabilities =
-      minDate && maxDate
-        ? getAdjustedAvailabilityForDateRange(
-            minDate,
-            maxDate,
-            availabilities,
-            rentalTrialRecords,
-          )
-        : availabilities;
-
-    // Build per-machine comparison
-    const allMachines = new Set([
-      ...Object.keys(machineMaxLast),
-      ...Object.keys(machineMaxUpdate),
+    const machineKeys = new Set([
+      ...weekData.lastByKey.keys(),
+      ...weekData.updateByKey.keys(),
     ]);
 
-    return Array.from(allMachines)
-      .map((machine) => {
-        const lastReq = machineMaxLast[machine] || 0;
-        const updateReq = machineMaxUpdate[machine] || 0;
-        const available =
-          weeklyAvailabilities.find(
-            (a) => a.jenisMesin.toLowerCase() === machine.toLowerCase(),
-          )?.jumlahMesin || 0;
+    const rows = Array.from(machineKeys).map((key) => {
+      const lastSummary = weekData.lastByKey.get(key);
+      const updateSummary = weekData.updateByKey.get(key);
 
-        const oldGap = available - lastReq;
-        const newGap = available - updateReq;
+      const available =
+        updateSummary?.available ?? lastSummary?.available ?? 0;
+      const lastReq = lastSummary?.required ?? 0;
+      const updateReq = updateSummary?.required ?? 0;
 
-        const isNowShortage = newGap < 0 && oldGap >= 0;
-        const isWorseShortage = newGap < 0 && oldGap < 0 && newGap < oldGap;
+      const oldPhysicalGap = lastSummary?.gap ?? available;
+      const newPhysicalGap = updateSummary?.gap ?? available;
+      const oldGap = lastSummary?.netGap ?? oldPhysicalGap;
+      const newGap = updateSummary?.netGap ?? newPhysicalGap;
 
-        return {
-          machine,
-          available,
-          lastReq,
-          updateReq,
-          oldGap,
-          newGap,
-          isNowShortage,
-          isWorseShortage,
-        };
-      })
+      const isNowShortage = newGap < 0 && oldGap >= 0;
+      const isWorseShortage = newGap < 0 && oldGap < 0 && newGap < oldGap;
+
+      return {
+        machine: updateSummary?.machine || lastSummary?.machine || key,
+        available,
+        lastReq,
+        updateReq,
+        oldGap,
+        newGap,
+        oldPhysicalGap,
+        newPhysicalGap,
+        cover: updateSummary?.cover ?? 0,
+        coverDetails: updateSummary?.coverDetails ?? [],
+        lastCover: lastSummary?.cover ?? 0,
+        isNowShortage,
+        isWorseShortage,
+      };
+    });
+
+    return rows
+      .filter(
+        (row) =>
+          row.lastReq > 0 || row.updateReq > 0 || Math.abs(row.cover) > 0,
+      )
       .sort((a, b) => {
-        const getPriority = (row: any) => {
+        const getPriority = (row: {
+          isNowShortage: boolean;
+          isWorseShortage: boolean;
+          newGap: number;
+        }) => {
           if (row.isNowShortage || row.isWorseShortage) return 1;
           if (row.newGap < 0) return 2;
           return 3;
@@ -953,13 +939,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         if (pA !== pB) return pA - pB;
         return a.newGap - b.newGap;
       });
-  }, [
-    selectedChartWeek,
-    snapshots,
-    requirements,
-    availabilities,
-    rentalTrialRecords,
-  ]);
+  }, [selectedChartWeek, weekScenarioData]);
 
   // === Per-Line Style Detail for selected week ===
   const selectedWeekLineData = useMemo(() => {
@@ -1765,9 +1745,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           <div className="text-xs text-slate-700 dark:text-slate-300 w-full">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5 border-b border-slate-200 dark:border-slate-700 pb-1.5">
                               <span className="font-bold">
-                                Shortage Alerts:
+                                Shortage / Cover Alerts:
                               </span>
-                              <div className="flex items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
+                              <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
                                 <span className="flex items-center gap-1">
                                   <span className="w-2 h-2 rounded-full bg-red-400"></span>{" "}
                                   Tidak Shortage → Menjadi Shortage
@@ -1780,29 +1760,63 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                   <span className="w-2 h-2 rounded-full bg-slate-400"></span>{" "}
                                   Shortage Tetap
                                 </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="w-2 h-2 rounded-full bg-blue-400"></span>{" "}
+                                  Tertutup Cover
+                                </span>
                               </div>
                             </div>
                             <div className="grid grid-rows-5 grid-flow-col gap-x-3 gap-y-1.5 overflow-x-auto pb-1 justify-start items-start">
                               {weeklyComparisonData.alerts.map((a, i) => (
                                 <div key={i}>
                                   <strong>{a.week.split("-")[0]}</strong>:{" "}
-                                  {a.shortageAlerts.map(
-                                    (alert: any, j: number) => (
+                                  {a.shortageAlerts.map((alert, j) => {
+                                    const coverDetailText = (
+                                      alert.coverDetails || []
+                                    )
+                                      .filter((d) =>
+                                        (alert.cover ?? 0) > 0
+                                          ? d.type === "in"
+                                          : d.type === "out",
+                                      )
+                                      .map(
+                                        (d) =>
+                                          `${d.machine} ${formatDecimal(d.count)}`,
+                                      )
+                                      .join(", ");
+
+                                    const tooltip = [
+                                      `Fisik: ${formatDecimal(alert.lastReq)} → ${formatDecimal(alert.updateReq)} (Kapasitas: ${formatDecimal(alert.availCount)})`,
+                                      `Net: ${formatSignedDecimal(alert.lastNet ?? 0)} → ${formatSignedDecimal(alert.updateNet ?? 0)}`,
+                                      (alert.cover ?? 0) !== 0
+                                        ? `Cover ${formatSignedDecimal(alert.cover)}${coverDetailText ? ` (${coverDetailText})` : ""}`
+                                        : "",
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ");
+
+                                    return (
                                       <span
                                         key={j}
-                                        title={`Before: ${formatDecimal(alert.lastReq)}, After: ${formatDecimal(alert.updateReq)} (Kapasitas: ${formatDecimal(alert.availCount)})`}
+                                        title={tooltip}
                                         className={`inline-block mr-1.5 mb-1.5 px-2 py-1 rounded text-[10px] font-semibold border cursor-help ${
                                           alert.type === "RED"
                                             ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50"
                                             : alert.type === "ORANGE"
                                               ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800/50"
-                                              : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                                              : alert.type === "COVERED"
+                                                ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800/50"
+                                                : "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
                                         }`}
                                       >
                                         {alert.machine}
+                                        {alert.type === "COVERED" &&
+                                        (alert.cover ?? 0) > 0
+                                          ? ` +${formatDecimal(alert.cover ?? 0)}`
+                                          : ""}
                                       </span>
-                                    ),
-                                  )}
+                                    );
+                                  })}
                                 </div>
                               ))}
                             </div>
@@ -1999,12 +2013,22 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                           >
                             {weeklyComparisonData.chartData.map((d) => {
                               const weekShort = String(d.week).split("-")[0];
-                              const hasAlert =
-                                d.shortageAlerts && d.shortageAlerts.length > 0;
+                              const hasRealShortage = d.shortageAlerts?.some(
+                                (a) => a.type !== "COVERED",
+                              );
+                              const hasCoverOnly =
+                                !hasRealShortage &&
+                                d.shortageAlerts?.some(
+                                  (a) => a.type === "COVERED",
+                                );
                               return (
                                 <option key={d.week} value={d.week}>
                                   {weekShort}{" "}
-                                  {hasAlert ? "⚠️ (Ada Shortage)" : ""}
+                                  {hasRealShortage
+                                    ? "⚠️ (Ada Shortage)"
+                                    : hasCoverOnly
+                                      ? "✔ (Tertutup Cover)"
+                                      : ""}
                                 </option>
                               );
                             })}
@@ -2501,13 +2525,20 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 </table>
                               </div>
                             </div>
-                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 px-1 shrink-0">
-                              <span>
-                                {selectedWeekLineData.length} line terdata
-                              </span>
-                              <span className="text-slate-400 dark:text-slate-500">
-                                ↕ Scroll tabel ke bawah untuk baris lainnya
-                              </span>
+                            <div className="mt-1.5 px-1 shrink-0 space-y-1">
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                                <span>
+                                  {selectedWeekLineData.length} line terdata
+                                </span>
+                                <span className="text-slate-400 dark:text-slate-500">
+                                  ↕ Scroll tabel ke bawah untuk baris lainnya
+                                </span>
+                              </div>
+                              <p className="text-[9px] leading-relaxed text-slate-400 dark:text-slate-500">
+                                *Gap per line masih gap fisik (belum
+                                memperhitungkan cover antar-line). Lihat tabel
+                                mesin untuk Net Gap setelah cover/substitusi.
+                              </p>
                             </div>
                           </div>
                         )}
@@ -2559,14 +2590,18 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                       </div>
                                     </th>
                                     <th className="px-1 py-2 font-semibold text-center text-slate-500 dark:text-slate-400 w-[11%] border-l border-slate-100 dark:border-slate-800">
-                                      <div className="leading-tight">Gap</div>
+                                      <div className="leading-tight">
+                                        Net Gap
+                                      </div>
                                       <div className="text-[9px] font-normal opacity-85 leading-tight truncate">
                                         ({weeklyComparisonData.lastVersionLabel}
                                         )
                                       </div>
                                     </th>
                                     <th className="px-1 py-2 font-semibold text-center text-indigo-600 dark:text-indigo-400 w-[11%]">
-                                      <div className="leading-tight">Gap</div>
+                                      <div className="leading-tight">
+                                        Net Gap
+                                      </div>
                                       <div className="text-[9px] font-normal opacity-85 leading-tight truncate">
                                         (
                                         {
@@ -2582,30 +2617,54 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700 transition-colors">
                                   {selectedWeekMachineData.map((row, i) => {
+                                    // Status berbasis Net Gap (setelah cover).
                                     let statusText = "OK";
                                     let statusClass =
                                       "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30";
 
-                                    if (row.isNowShortage) {
-                                      statusText = "Menjadi Shortage";
+                                    if (row.newGap < 0) {
+                                      if (row.isNowShortage) {
+                                        statusText = "Menjadi Shortage";
+                                        statusClass =
+                                          "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
+                                      } else if (row.isWorseShortage) {
+                                        statusText = "Shortage Bertambah";
+                                        statusClass =
+                                          "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
+                                      } else {
+                                        statusText = "Shortage Tetap";
+                                        statusClass =
+                                          "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
+                                      }
+                                    } else if (row.newPhysicalGap < 0) {
+                                      statusText = "Tertutup Cover";
                                       statusClass =
-                                        "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
-                                    } else if (row.isWorseShortage) {
-                                      statusText = "Shortage Bertambah";
-                                      statusClass =
-                                        "text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-900/30";
-                                    } else if (
-                                      row.newGap < 0 &&
-                                      row.oldGap < 0
-                                    ) {
-                                      statusText = "Shortage Tetap";
-                                      statusClass =
-                                        "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
-                                    } else if (row.newGap < 0) {
-                                      statusText = "Shortage";
-                                      statusClass =
-                                        "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
+                                        "text-blue-600 dark:text-blue-400 font-semibold bg-blue-50 dark:bg-blue-900/30";
                                     }
+
+                                    // Rincian asal angka cover (+ menerima / - memberi).
+                                    const coverDetailText = (row.coverDetails || [])
+                                      .filter((d) =>
+                                        row.cover > 0
+                                          ? d.type === "in"
+                                          : d.type === "out",
+                                      )
+                                      .map(
+                                        (d) =>
+                                          `${d.machine} ${formatDecimal(d.count)}`,
+                                      )
+                                      .join(", ");
+
+                                    const coverTooltip = [
+                                      `Cover ${formatSignedDecimal(row.cover)} unit`,
+                                      coverDetailText
+                                        ? `(${coverDetailText})`
+                                        : "",
+                                      `Gap fisik: ${formatSignedDecimal(row.oldPhysicalGap)} → ${formatSignedDecimal(row.newPhysicalGap)}`,
+                                      `Net gap: ${formatSignedDecimal(row.oldGap)} → ${formatSignedDecimal(row.newGap)}`,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ");
 
                                     return (
                                       <tr
@@ -2613,7 +2672,25 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         className="bg-white dark:bg-slate-900 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50"
                                       >
                                         <td className="px-2 py-2 font-medium text-slate-800 dark:text-slate-200 text-[11px] leading-tight break-words">
-                                          {row.machine}
+                                          <div>{row.machine}</div>
+                                          {row.cover !== 0 && (
+                                            <div
+                                              title={coverTooltip}
+                                              className={`mt-0.5 inline-flex max-w-full items-center gap-1 rounded px-1 py-[1px] text-[9px] font-semibold leading-tight cursor-help ${
+                                                row.cover > 0
+                                                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+                                                  : "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                                              }`}
+                                            >
+                                              <span>
+                                                {formatSignedDecimal(row.cover)}
+                                              </span>
+                                              <span className="truncate font-normal">
+                                                {row.cover > 0 ? "←" : "→"}{" "}
+                                                {coverDetailText || "-"}
+                                              </span>
+                                            </div>
+                                          )}
                                         </td>
                                         <td className="px-1 py-2 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors text-[11px]">
                                           {formatDecimal(row.available)}
@@ -2625,12 +2702,40 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                           {formatDecimal(row.updateReq)}
                                         </td>
                                         <td className="px-1 py-2 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors text-[11px]">
-                                          {formatSignedDecimal(row.oldGap)}
+                                          <div>
+                                            {formatSignedDecimal(row.oldGap)}
+                                          </div>
+                                          {row.oldPhysicalGap !==
+                                            row.oldGap && (
+                                            <div
+                                              className="text-[9px] font-normal text-slate-400 dark:text-slate-500 whitespace-nowrap"
+                                              title={`Gap fisik ${formatSignedDecimal(row.oldPhysicalGap)} + cover ${formatSignedDecimal(row.lastCover)} = net ${formatSignedDecimal(row.oldGap)}`}
+                                            >
+                                              fisik{" "}
+                                              {formatSignedDecimal(
+                                                row.oldPhysicalGap,
+                                              )}
+                                            </div>
+                                          )}
                                         </td>
                                         <td
                                           className={`px-1 py-2 text-center font-bold text-xs ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
                                         >
-                                          {formatSignedDecimal(row.newGap)}
+                                          <div>
+                                            {formatSignedDecimal(row.newGap)}
+                                          </div>
+                                          {row.newPhysicalGap !==
+                                            row.newGap && (
+                                            <div
+                                              className="text-[9px] font-normal text-slate-400 dark:text-slate-500 whitespace-nowrap"
+                                              title={`Gap fisik ${formatSignedDecimal(row.newPhysicalGap)} + cover ${formatSignedDecimal(row.cover)} = net ${formatSignedDecimal(row.newGap)}`}
+                                            >
+                                              fisik{" "}
+                                              {formatSignedDecimal(
+                                                row.newPhysicalGap,
+                                              )}
+                                            </div>
+                                          )}
                                         </td>
                                         <td className="px-1 py-2 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle">
                                           <div
@@ -2703,15 +2808,44 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                               </table>
                             </div>
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 px-1 shrink-0">
-                            <span>
-                              {selectedWeekMachineData.length} jenis mesin
-                              terdata
-                            </span>
-                            <span className="text-slate-400 dark:text-slate-500">
-                              ↕ Scroll tabel ke bawah untuk melihat semua jenis
-                              mesin
-                            </span>
+                          <div className="mt-1.5 px-1 shrink-0 space-y-1">
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                              <span>
+                                {selectedWeekMachineData.length} jenis mesin
+                                terdata
+                              </span>
+                              <span className="text-slate-400 dark:text-slate-500">
+                                ↕ Scroll tabel ke bawah untuk melihat semua
+                                jenis mesin
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] leading-tight text-slate-500 dark:text-slate-400">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="rounded bg-blue-50 px-1 py-[1px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                  +13
+                                </span>
+                                = cover diterima
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <span className="rounded bg-amber-50 px-1 py-[1px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                  −12
+                                </span>
+                                = cover diberikan
+                              </span>
+                              <span className="text-slate-400 dark:text-slate-500">
+                                Arah ← penerima, → pemberi
+                              </span>
+                            </div>
+                            <p className="text-[9px] leading-relaxed text-slate-400 dark:text-slate-500">
+                              Net Gap = gap fisik + cover. Cover dihitung per
+                              minggu: OVD saling menutup, OL4 selalu boleh
+                              menutup OL3, OL5 hanya jika ada style di{" "}
+                              <span className="font-semibold">
+                                List Style Cover OL5
+                              </span>{" "}
+                              dan maksimal sebesar porsi whitelist pada hari
+                              puncak OL3.
+                            </p>
                           </div>
                         </div>
                       ) : detailTab === "mesin" && selectedChartWeek ? (

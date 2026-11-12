@@ -17,6 +17,7 @@ import {
   RentalTrialRecord,
   RentalTrialAlert,
   AvailabilityVariation,
+  SnapshotRecord,
 } from '../types/mrp';
 
 /**
@@ -188,6 +189,47 @@ export const collectActiveStyles = (
   });
 
   return styles;
+};
+
+/**
+ * Membangun daftar plan dari baris Snapshot untuk satu skenario:
+ * - "last"   = plan sebelum perubahan (W sebelumnya)
+ * - "update" = plan sesudah perubahan (W berjalan)
+ *
+ * Dipakai tab Plan History agar kebutuhan mesin dihitung dari plan lengkap
+ * (termasuk gate whitelist OL5, hari puncak, dan ACC), bukan hanya menjumlah
+ * `kebutuhanTotal` per style.
+ */
+export const buildScenarioPlansFromSnapshots = (
+  snapshots: SnapshotRecord[],
+  scenario: 'last' | 'update',
+): ProductionPlan[] => {
+  const planPerDateLine: Record<string, ProductionPlan> = {};
+
+  snapshots.forEach((snap) => {
+    if (!snap.planningDate || isSunday(snap.planningDate)) return;
+
+    const line = (snap.line || '').trim();
+    if (!line) return;
+
+    const rawStyle =
+      scenario === 'last' ? snap.lastMachineStyle : snap.updateMachineStyle;
+    const rawDisplay =
+      scenario === 'last' ? snap.lastPlanningStyle : snap.updatePlanningStyle;
+
+    const style = (rawStyle || '').trim();
+    // Buang "NO PLANNING" / "-" / kosong agar tidak membuat plan palsu.
+    if (!isUsableStyleKey(normalizeStyleKey(style))) return;
+
+    planPerDateLine[`${snap.planningDate}|${line}`] = {
+      line,
+      date: snap.planningDate,
+      style,
+      displayStyle: (rawDisplay || '').trim(),
+    };
+  });
+
+  return Object.values(planPerDateLine);
 };
 
 /**
