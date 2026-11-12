@@ -2647,8 +2647,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                     const formatCoverDetail = (
                                       details: MachineCoverDetail[],
                                       coverValue: number,
-                                    ) =>
-                                      (details || [])
+                                    ) => {
+                                      const sign = coverValue > 0 ? 1 : -1;
+                                      return (details || [])
                                         .filter((d) =>
                                           coverValue > 0
                                             ? d.type === "in"
@@ -2656,9 +2657,10 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         )
                                         .map(
                                           (d) =>
-                                            `${d.machine} ${formatSignedDecimal(d.count)}`,
+                                            `${d.machine} (${formatSignedDecimal(d.count * sign)})`,
                                         )
                                         .join(", ");
+                                    };
 
                                     // Sel Net Gap: gap tanpa cover → net gap,
                                     // plus keterangan asal cover di bawahnya.
@@ -2677,7 +2679,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                       const tooltip = [
                                         `Gap tanpa cover ${formatSignedDecimal(rawGap)} + cover ${formatSignedDecimal(coverValue)} = net ${formatSignedDecimal(netGap)}`,
                                         detailText
-                                          ? `Cover ${formatSignedDecimal(coverValue)} dari ${detailText}`
+                                          ? `Cover ${formatSignedDecimal(coverValue)} ${coverValue > 0 ? "dari" : "ke"} ${detailText}`
                                           : "",
                                       ]
                                         .filter(Boolean)
@@ -2859,13 +2861,13 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                               </span>
                               <span className="inline-flex items-center gap-1">
                                 <span className="rounded bg-slate-100 px-1 py-[1px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                                  dari OL4 +12, OL5 +1
+                                  dari OL4 (+12), OL5 (+1)
                                 </span>
                                 = cover diterima
                               </span>
                               <span className="inline-flex items-center gap-1">
                                 <span className="rounded bg-slate-100 px-1 py-[1px] font-normal text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                                  ke OL3 +12
+                                  ke OL3 (-1)
                                 </span>
                                 = cover diberikan
                               </span>
