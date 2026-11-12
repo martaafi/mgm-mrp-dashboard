@@ -2676,14 +2676,6 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         details,
                                         coverValue,
                                       );
-                                      const tooltip = [
-                                        `Gap tanpa cover ${formatSignedDecimal(rawGap)} + cover ${formatSignedDecimal(coverValue)} = net ${formatSignedDecimal(netGap)}`,
-                                        detailText
-                                          ? `Cover ${formatSignedDecimal(coverValue)} ${coverValue > 0 ? "dari" : "ke"} ${detailText}`
-                                          : "",
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" · ");
 
                                       return (
                                         <td
@@ -2714,10 +2706,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                                   {formatSignedDecimal(netGap)}
                                                 </span>
                                               </div>
-                                              <div
-                                                title={tooltip}
-                                                className="max-w-full text-[9px] font-normal leading-tight break-words cursor-help text-slate-400 dark:text-slate-500"
-                                              >
+                                              <div className="max-w-full text-[9px] font-normal leading-tight break-words text-slate-400 dark:text-slate-500">
                                                 {coverValue > 0
                                                   ? "dari "
                                                   : "ke "}
