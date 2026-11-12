@@ -914,6 +914,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
         cover: updateSummary?.cover ?? 0,
         coverDetails: updateSummary?.coverDetails ?? [],
         lastCover: lastSummary?.cover ?? 0,
+        lastCoverDetails: lastSummary?.coverDetails ?? [],
         isNowShortage,
         isWorseShortage,
       };
@@ -2643,28 +2644,101 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                     }
 
                                     // Rincian asal angka cover (+ menerima / - memberi).
-                                    const coverDetailText = (row.coverDetails || [])
-                                      .filter((d) =>
-                                        row.cover > 0
-                                          ? d.type === "in"
-                                          : d.type === "out",
-                                      )
-                                      .map(
-                                        (d) =>
-                                          `${d.machine} ${formatDecimal(d.count)}`,
-                                      )
-                                      .join(", ");
+                                    const formatCoverDetail = (
+                                      details: MachineCoverDetail[],
+                                      coverValue: number,
+                                    ) =>
+                                      (details || [])
+                                        .filter((d) =>
+                                          coverValue > 0
+                                            ? d.type === "in"
+                                            : d.type === "out",
+                                        )
+                                        .map(
+                                          (d) =>
+                                            `${d.machine} ${formatDecimal(d.count)}`,
+                                        )
+                                        .join(", ");
 
-                                    const coverTooltip = [
-                                      `Cover ${formatSignedDecimal(row.cover)} unit`,
-                                      coverDetailText
-                                        ? `(${coverDetailText})`
-                                        : "",
-                                      `Gap tanpa cover: ${formatSignedDecimal(row.oldPhysicalGap)} → ${formatSignedDecimal(row.newPhysicalGap)}`,
-                                      `Net gap: ${formatSignedDecimal(row.oldGap)} → ${formatSignedDecimal(row.newGap)}`,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" · ");
+                                    // Sel Net Gap: gap tanpa cover → net gap,
+                                    // plus keterangan asal cover di bawahnya.
+                                    const renderGapCell = (
+                                      rawGap: number,
+                                      netGap: number,
+                                      coverValue: number,
+                                      details: MachineCoverDetail[],
+                                      extraClass: string,
+                                    ) => {
+                                      const hasCover = coverValue !== 0;
+                                      const detailText = formatCoverDetail(
+                                        details,
+                                        coverValue,
+                                      );
+                                      const tooltip = [
+                                        `Gap tanpa cover ${formatSignedDecimal(rawGap)} + cover ${formatSignedDecimal(coverValue)} = net ${formatSignedDecimal(netGap)}`,
+                                        detailText
+                                          ? `Cover ${formatSignedDecimal(coverValue)} dari ${detailText}`
+                                          : "",
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" · ");
+
+                                      return (
+                                        <td
+                                          className={`px-1 py-2 text-center align-middle transition-colors ${extraClass}`}
+                                        >
+                                          {hasCover ? (
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <div className="flex items-center justify-center gap-0.5 text-[11px] font-semibold leading-none whitespace-nowrap">
+                                                <span
+                                                  className={
+                                                    rawGap < 0
+                                                      ? "text-red-600 dark:text-red-500"
+                                                      : "text-emerald-600 dark:text-emerald-500"
+                                                  }
+                                                >
+                                                  {formatSignedDecimal(rawGap)}
+                                                </span>
+                                                <span className="text-slate-400 dark:text-slate-500">
+                                                  →
+                                                </span>
+                                                <span
+                                                  className={
+                                                    netGap < 0
+                                                      ? "text-red-600 dark:text-red-500"
+                                                      : "text-emerald-600 dark:text-emerald-500"
+                                                  }
+                                                >
+                                                  {formatSignedDecimal(netGap)}
+                                                </span>
+                                              </div>
+                                              <div
+                                                title={tooltip}
+                                                className={`max-w-full text-[9px] font-semibold leading-tight break-words cursor-help ${
+                                                  coverValue > 0
+                                                    ? "text-blue-600 dark:text-blue-300"
+                                                    : "text-amber-600 dark:text-amber-300"
+                                                }`}
+                                              >
+                                                {formatSignedDecimal(coverValue)}{" "}
+                                                {coverValue > 0 ? "←" : "→"}{" "}
+                                                {detailText}
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div
+                                              className={`text-xs font-bold ${
+                                                netGap < 0
+                                                  ? "text-red-600 dark:text-red-500"
+                                                  : "text-emerald-600 dark:text-emerald-500"
+                                              }`}
+                                            >
+                                              {formatSignedDecimal(netGap)}
+                                            </div>
+                                          )}
+                                        </td>
+                                      );
+                                    };
 
                                     return (
                                       <tr
@@ -2672,25 +2746,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         className="bg-white dark:bg-slate-900 transition-colors hover:bg-slate-50/50 dark:hover:bg-slate-800/50"
                                       >
                                         <td className="px-2 py-2 font-medium text-slate-800 dark:text-slate-200 text-[11px] leading-tight break-words">
-                                          <div>{row.machine}</div>
-                                          {row.cover !== 0 && (
-                                            <div
-                                              title={coverTooltip}
-                                              className={`mt-0.5 inline-flex max-w-full items-center gap-1 rounded px-1 py-[1px] text-[9px] font-semibold leading-tight cursor-help ${
-                                                row.cover > 0
-                                                  ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                                                  : "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-                                              }`}
-                                            >
-                                              <span>
-                                                {formatSignedDecimal(row.cover)}
-                                              </span>
-                                              <span className="truncate font-normal">
-                                                {row.cover > 0 ? "←" : "→"}{" "}
-                                                {coverDetailText || "-"}
-                                              </span>
-                                            </div>
-                                          )}
+                                          {row.machine}
                                         </td>
                                         <td className="px-1 py-2 text-center font-medium text-slate-600 dark:text-slate-300 bg-slate-50/50 dark:bg-slate-800/30 border-r border-slate-100 dark:border-slate-800 transition-colors text-[11px]">
                                           {formatDecimal(row.available)}
@@ -2701,42 +2757,20 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         <td className="px-1 py-2 text-center font-bold text-indigo-600 dark:text-indigo-400 text-xs">
                                           {formatDecimal(row.updateReq)}
                                         </td>
-                                        <td className="px-1 py-2 text-center text-slate-500 dark:text-slate-400 border-l border-slate-100 dark:border-slate-800 transition-colors text-[11px]">
-                                          <div>
-                                            {formatSignedDecimal(row.oldGap)}
-                                          </div>
-                                          {row.oldPhysicalGap !==
-                                            row.oldGap && (
-                                            <div
-                                              className="text-[9px] font-normal text-slate-400 dark:text-slate-500 whitespace-nowrap"
-                                              title={`Gap tanpa cover ${formatSignedDecimal(row.oldPhysicalGap)} + cover ${formatSignedDecimal(row.lastCover)} = net ${formatSignedDecimal(row.oldGap)}`}
-                                            >
-                                              tanpa cover{" "}
-                                              {formatSignedDecimal(
-                                                row.oldPhysicalGap,
-                                              )}
-                                            </div>
-                                          )}
-                                        </td>
-                                        <td
-                                          className={`px-1 py-2 text-center font-bold text-xs ${row.newGap < 0 ? "text-red-600 dark:text-red-500" : "text-emerald-600 dark:text-emerald-500"}`}
-                                        >
-                                          <div>
-                                            {formatSignedDecimal(row.newGap)}
-                                          </div>
-                                          {row.newPhysicalGap !==
-                                            row.newGap && (
-                                            <div
-                                              className="text-[9px] font-normal text-slate-400 dark:text-slate-500 whitespace-nowrap"
-                                              title={`Gap tanpa cover ${formatSignedDecimal(row.newPhysicalGap)} + cover ${formatSignedDecimal(row.cover)} = net ${formatSignedDecimal(row.newGap)}`}
-                                            >
-                                              tanpa cover{" "}
-                                              {formatSignedDecimal(
-                                                row.newPhysicalGap,
-                                              )}
-                                            </div>
-                                          )}
-                                        </td>
+                                        {renderGapCell(
+                                          row.oldPhysicalGap,
+                                          row.oldGap,
+                                          row.lastCover,
+                                          row.lastCoverDetails,
+                                          "border-l border-slate-100 dark:border-slate-800",
+                                        )}
+                                        {renderGapCell(
+                                          row.newPhysicalGap,
+                                          row.newGap,
+                                          row.cover,
+                                          row.coverDetails,
+                                          "",
+                                        )}
                                         <td className="px-1 py-2 text-center border-l border-slate-100 dark:border-slate-800 transition-colors align-middle">
                                           <div
                                             className={`text-[10px] leading-tight mx-auto px-1 py-0.5 rounded break-words font-semibold ${statusClass}`}
@@ -2821,19 +2855,22 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                             </div>
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] leading-tight text-slate-500 dark:text-slate-400">
                               <span className="inline-flex items-center gap-1">
+                                <span className="rounded bg-slate-100 px-1 py-[1px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                  −13 → 0
+                                </span>
+                                = gap tanpa cover → net gap
+                              </span>
+                              <span className="inline-flex items-center gap-1">
                                 <span className="rounded bg-blue-50 px-1 py-[1px] font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                                  +13
+                                  +13 ← OL4 12, OL5 1
                                 </span>
                                 = cover diterima
                               </span>
                               <span className="inline-flex items-center gap-1">
                                 <span className="rounded bg-amber-50 px-1 py-[1px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                  −12
+                                  −12 → OL3 12
                                 </span>
                                 = cover diberikan
-                              </span>
-                              <span className="text-slate-400 dark:text-slate-500">
-                                Arah ← penerima, → pemberi
                               </span>
                             </div>
                             <p className="text-[9px] leading-relaxed text-slate-400 dark:text-slate-500">
