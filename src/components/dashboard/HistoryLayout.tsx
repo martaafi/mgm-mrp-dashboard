@@ -705,7 +705,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
             updatePhysicalGap < 0 &&
             (updateSummary.cover ?? 0) > 0
           ) {
-            alertType = "COVERED"; // Defisit fisik tertutup cover/substitusi
+            alertType = "COVERED"; // Defisit tanpa cover tertutup substitusi
           }
 
           if (!alertType) return;
@@ -873,7 +873,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
 
   // Compute per-machine breakdown for the selected week.
   // Angka sudah cover-aware: `oldGap`/`newGap` = net gap setelah substitusi,
-  // sedangkan `oldPhysicalGap`/`newPhysicalGap` = gap fisik murni.
+  // sedangkan `oldPhysicalGap`/`newPhysicalGap` = gap tanpa cover.
   const selectedWeekMachineData = useMemo(() => {
     if (!selectedChartWeek) return [];
 
@@ -1762,7 +1762,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <span className="w-2 h-2 rounded-full bg-blue-400"></span>{" "}
-                                  Tertutup Cover
+                                  Covered
                                 </span>
                               </div>
                             </div>
@@ -1786,7 +1786,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                       .join(", ");
 
                                     const tooltip = [
-                                      `Fisik: ${formatDecimal(alert.lastReq)} → ${formatDecimal(alert.updateReq)} (Kapasitas: ${formatDecimal(alert.availCount)})`,
+                                      `Kebutuhan: ${formatDecimal(alert.lastReq)} → ${formatDecimal(alert.updateReq)} (Kapasitas: ${formatDecimal(alert.availCount)})`,
                                       `Net: ${formatSignedDecimal(alert.lastNet ?? 0)} → ${formatSignedDecimal(alert.updateNet ?? 0)}`,
                                       (alert.cover ?? 0) !== 0
                                         ? `Cover ${formatSignedDecimal(alert.cover)}${coverDetailText ? ` (${coverDetailText})` : ""}`
@@ -2027,7 +2027,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                   {hasRealShortage
                                     ? "⚠️ (Ada Shortage)"
                                     : hasCoverOnly
-                                      ? "✔ (Tertutup Cover)"
+                                      ? "✔ (Covered)"
                                       : ""}
                                 </option>
                               );
@@ -2535,7 +2535,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                 </span>
                               </div>
                               <p className="text-[9px] leading-relaxed text-slate-400 dark:text-slate-500">
-                                *Gap per line masih gap fisik (belum
+                                *Gap per line masih gap tanpa cover (belum
                                 memperhitungkan cover antar-line). Lihat tabel
                                 mesin untuk Net Gap setelah cover/substitusi.
                               </p>
@@ -2637,7 +2637,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                           "text-orange-600 dark:text-orange-400 font-medium bg-orange-50 dark:bg-orange-900/30";
                                       }
                                     } else if (row.newPhysicalGap < 0) {
-                                      statusText = "Tertutup Cover";
+                                      statusText = "Covered";
                                       statusClass =
                                         "text-blue-600 dark:text-blue-400 font-semibold bg-blue-50 dark:bg-blue-900/30";
                                     }
@@ -2660,7 +2660,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                       coverDetailText
                                         ? `(${coverDetailText})`
                                         : "",
-                                      `Gap fisik: ${formatSignedDecimal(row.oldPhysicalGap)} → ${formatSignedDecimal(row.newPhysicalGap)}`,
+                                      `Gap tanpa cover: ${formatSignedDecimal(row.oldPhysicalGap)} → ${formatSignedDecimal(row.newPhysicalGap)}`,
                                       `Net gap: ${formatSignedDecimal(row.oldGap)} → ${formatSignedDecimal(row.newGap)}`,
                                     ]
                                       .filter(Boolean)
@@ -2709,9 +2709,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                             row.oldGap && (
                                             <div
                                               className="text-[9px] font-normal text-slate-400 dark:text-slate-500 whitespace-nowrap"
-                                              title={`Gap fisik ${formatSignedDecimal(row.oldPhysicalGap)} + cover ${formatSignedDecimal(row.lastCover)} = net ${formatSignedDecimal(row.oldGap)}`}
+                                              title={`Gap tanpa cover ${formatSignedDecimal(row.oldPhysicalGap)} + cover ${formatSignedDecimal(row.lastCover)} = net ${formatSignedDecimal(row.oldGap)}`}
                                             >
-                                              fisik{" "}
+                                              tanpa cover{" "}
                                               {formatSignedDecimal(
                                                 row.oldPhysicalGap,
                                               )}
@@ -2728,9 +2728,9 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                             row.newGap && (
                                             <div
                                               className="text-[9px] font-normal text-slate-400 dark:text-slate-500 whitespace-nowrap"
-                                              title={`Gap fisik ${formatSignedDecimal(row.newPhysicalGap)} + cover ${formatSignedDecimal(row.cover)} = net ${formatSignedDecimal(row.newGap)}`}
+                                              title={`Gap tanpa cover ${formatSignedDecimal(row.newPhysicalGap)} + cover ${formatSignedDecimal(row.cover)} = net ${formatSignedDecimal(row.newGap)}`}
                                             >
-                                              fisik{" "}
+                                              tanpa cover{" "}
                                               {formatSignedDecimal(
                                                 row.newPhysicalGap,
                                               )}
@@ -2837,7 +2837,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                               </span>
                             </div>
                             <p className="text-[9px] leading-relaxed text-slate-400 dark:text-slate-500">
-                              Net Gap = gap fisik + cover. Cover dihitung per
+                              Net Gap = gap tanpa cover + cover. Cover dihitung per
                               minggu: OVD saling menutup, OL4 selalu boleh
                               menutup OL3, OL5 hanya jika ada style di{" "}
                               <span className="font-semibold">
