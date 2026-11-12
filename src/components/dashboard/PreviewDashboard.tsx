@@ -172,6 +172,7 @@ interface PreviewDashboardProps {
   downtimeRecords: DowntimeRecord[];
   onNavigateTab: (tab: TabValue) => void;
   lastUpdated?: string | null;
+  ol5CoverStyles?: string[];
 }
 
 export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
@@ -184,6 +185,7 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
   downtimeRecords,
   onNavigateTab,
   lastUpdated,
+  ol5CoverStyles = [],
 }) => {
   /* ---- Current Week Context ---- */
   const currentWeek = useMemo(() => getCurrentWeekInfo(), []);
@@ -223,8 +225,9 @@ export const PreviewDashboard: React.FC<PreviewDashboardProps> = ({
         cleanPlans,
         requirements,
         adjustedAvailabilities,
+        ol5CoverStyles,
       ),
-    [cleanPlans, requirements, adjustedAvailabilities],
+    [cleanPlans, requirements, adjustedAvailabilities, ol5CoverStyles],
   );
 
   // Planning Style: Senin week berjalan s/d 1 bulan ke depan dari hari ini

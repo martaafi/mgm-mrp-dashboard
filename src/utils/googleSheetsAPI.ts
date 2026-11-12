@@ -373,6 +373,37 @@ export const fetchInventoryData = async (): Promise<InventoryRecord[]> => {
   return records;
 };
 
+// --- OL5 Cover Style Whitelist ---
+// Sheet "List Style Cover OL5": kolom A berisi daftar style yang boleh
+// di-cover oleh OL5. Dipakai oleh gate di applyMachineSubstitution().
+export const OL5_COVER_SHEET_NAME = "List Style Cover OL5";
+
+export const fetchOL5CoverStyles = async (): Promise<string[]> => {
+  try {
+    const data = await fetchCSVArray(OL5_COVER_SHEET_NAME);
+    const styles: string[] = [];
+
+    // Baris 0 = header → data mulai i = 1, ambil kolom A (index 0).
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row) continue;
+      const name = (row[0] || "").toString().trim();
+      if (!name) continue;
+      styles.push(name);
+    }
+
+    return [...new Set(styles)];
+  } catch (e) {
+    // Fail-safe: kalau sheet tidak ada / gagal diakses, dashboard tetap jalan
+    // dan gate OL5 dianggap OFF (lebih aman daripada menutup OL3 tanpa dasar).
+    console.warn(
+      "[OL5 Cover] Gagal mengambil sheet whitelist, gate dianggap OFF:",
+      e,
+    );
+    return [];
+  }
+};
+
 const parseDateStringForDowntime = (dateStr: string): string => {
   if (!dateStr) return "";
   // If DD/MM/YYYY or D/M/YYYY
@@ -709,6 +740,7 @@ export const CACHE_KEYS = {
   INVENTORY: "mrp_cache_inventory",
   DOWNTIME: "mrp_cache_downtime_v2",
   DOWNTIME_SOURCE: "mrp_cache_downtime_source",
+  OL5_COVER_STYLES: "mrp_cache_ol5_cover_styles_v1",
   TIMESTAMP: "mrp_cache_timestamp_v2",
 };
 
@@ -721,6 +753,7 @@ export interface FetchMRPDataResult {
   inventoryRecords: InventoryRecord[];
   downtimeRecords: DowntimeRecord[];
   downtimeSource: "apps_script" | "gviz" | "cache";
+  ol5CoverStyles: string[];
   isCached: boolean;
   lastUpdated: string;
 }
@@ -738,6 +771,7 @@ export const fetchAllMRPData = async (
       const cachedInventory = localStorage.getItem(CACHE_KEYS.INVENTORY);
       const cachedDowntime = localStorage.getItem(CACHE_KEYS.DOWNTIME);
       const cachedDowntimeSource = (localStorage.getItem(CACHE_KEYS.DOWNTIME_SOURCE) as "apps_script" | "gviz") || "gviz";
+      const cachedOl5CoverStyles = localStorage.getItem(CACHE_KEYS.OL5_COVER_STYLES);
       const cachedTime = localStorage.getItem(CACHE_KEYS.TIMESTAMP);
 
       if (
@@ -747,6 +781,7 @@ export const fetchAllMRPData = async (
         cachedSnapshots &&
         cachedRentalTrial &&
         cachedInventory &&
+        cachedOl5CoverStyles &&
         cachedTime
       ) {
         let parsedAvail = JSON.parse(cachedAvail);
@@ -770,6 +805,7 @@ export const fetchAllMRPData = async (
           inventoryRecords: JSON.parse(cachedInventory),
           downtimeRecords: cachedDowntime ? JSON.parse(cachedDowntime) : [],
           downtimeSource: cachedDowntimeSource,
+          ol5CoverStyles: JSON.parse(cachedOl5CoverStyles),
           isCached: true,
           lastUpdated: cachedTime,
         };
@@ -779,7 +815,7 @@ export const fetchAllMRPData = async (
     }
   }
 
-  const [plans, requirements, availabilities, snapshots, rentalTrialRecords, inventoryRecords, downtimeResult] = await Promise.all([
+  const [plans, requirements, availabilities, snapshots, rentalTrialRecords, inventoryRecords, downtimeResult, ol5CoverStyles] = await Promise.all([
     fetchPlans(),
     fetchMachineRequirements(),
     fetchAvailability(),
@@ -787,6 +823,7 @@ export const fetchAllMRPData = async (
     fetchRentalTrialData(),
     fetchInventoryData(),
     fetchDowntimeData(),
+    fetchOL5CoverStyles(),
   ]);
 
   const downtimeRecords = downtimeResult.records;
@@ -805,6 +842,7 @@ export const fetchAllMRPData = async (
     localStorage.setItem(CACHE_KEYS.INVENTORY, JSON.stringify(inventoryRecords));
     localStorage.setItem(CACHE_KEYS.DOWNTIME, JSON.stringify(downtimeRecords));
     localStorage.setItem(CACHE_KEYS.DOWNTIME_SOURCE, downtimeSource);
+    localStorage.setItem(CACHE_KEYS.OL5_COVER_STYLES, JSON.stringify(ol5CoverStyles));
     localStorage.setItem(CACHE_KEYS.TIMESTAMP, lastUpdated);
   } catch (e) {
     console.warn("Failed to save to localStorage cache:", e);
@@ -819,6 +857,7 @@ export const fetchAllMRPData = async (
     inventoryRecords,
     downtimeRecords,
     downtimeSource,
+    ol5CoverStyles,
     isCached: false,
     lastUpdated,
   };

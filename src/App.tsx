@@ -22,6 +22,7 @@ import {
   getRentalTrialAlerts,
   getAdjustedAvailabilityForDateRange,
   getCurrentWeekRange,
+  normalizeMachineKey,
 } from "./utils/mrpCalculations";
 import { exportMRPToExcel, exportSummaryToCSV } from "./utils/exportUtils";
 import { Header } from "./components/layout/Header";
@@ -55,6 +56,7 @@ export default function App() {
   const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
   const [rentalTrialRecords, setRentalTrialRecords] = useState<RentalTrialRecord[]>([]);
   const [inventoryRecords, setInventoryRecords] = useState<InventoryRecord[]>([]);
+  const [ol5CoverStyles, setOl5CoverStyles] = useState<string[]>([]);
   const [downtimeRecords, setDowntimeRecords] = useState<DowntimeRecord[]>([]);
   const [downtimeSource, setDowntimeSource] = useState<"apps_script" | "gviz" | "cache">("gviz");
   const [isDowntimeRetrying, setIsDowntimeRetrying] = useState(false);
@@ -80,6 +82,7 @@ export default function App() {
       setSnapshots(data.snapshots);
       setRentalTrialRecords(data.rentalTrialRecords || []);
       setInventoryRecords(data.inventoryRecords || []);
+      setOl5CoverStyles(data.ol5CoverStyles || []);
       setDowntimeRecords(data.downtimeRecords || []);
       setDowntimeSource(data.downtimeSource || "gviz");
       setLastUpdated(data.lastUpdated);
@@ -338,8 +341,13 @@ export default function App() {
 
   const summaryData = useMemo(
     () =>
-      calculateMachineRequirements(filteredPlans, requirements, adjustedAvailabilities),
-    [filteredPlans, requirements, adjustedAvailabilities],
+      calculateMachineRequirements(
+        filteredPlans,
+        requirements,
+        adjustedAvailabilities,
+        ol5CoverStyles,
+      ),
+    [filteredPlans, requirements, adjustedAvailabilities, ol5CoverStyles],
   );
 
   const lineMatrix = useMemo(
@@ -354,13 +362,30 @@ export default function App() {
 
   const drillDownData = useMemo(() => {
     if (!selectedMachine) return null;
+    const summary = summaryData.find(
+      (s) =>
+        normalizeMachineKey(s.machine) === normalizeMachineKey(selectedMachine),
+    );
     return getMachineDrillDown(
       selectedMachine,
       filteredPlans,
       requirements,
-      availabilities,
+      adjustedAvailabilities,
+      summary
+        ? {
+            cover: summary.cover ?? 0,
+            netGap: summary.netGap ?? summary.gap,
+            coverDetails: summary.coverDetails ?? [],
+          }
+        : undefined,
     );
-  }, [selectedMachine, filteredPlans, requirements, availabilities]);
+  }, [
+    selectedMachine,
+    filteredPlans,
+    requirements,
+    adjustedAvailabilities,
+    summaryData,
+  ]);
 
   const filterSummaryLabel = useMemo(() => {
     const parts: string[] = [];
@@ -593,6 +618,7 @@ export default function App() {
               downtimeRecords={downtimeRecords}
               onNavigateTab={setActiveTab}
               lastUpdated={lastUpdated}
+              ol5CoverStyles={ol5CoverStyles}
             />
           )}
 
@@ -623,6 +649,7 @@ export default function App() {
               rentalTrialRecords={rentalTrialRecords}
               initialDate={filters.startDate}
               initialEndDate={filters.endDate}
+              ol5CoverStyles={ol5CoverStyles}
             />
           )}
 
@@ -645,6 +672,7 @@ export default function App() {
               requirements={requirements}
               availabilities={availabilities}
               rentalTrialRecords={rentalTrialRecords}
+              ol5CoverStyles={ol5CoverStyles}
             />
           )}
 
@@ -656,6 +684,7 @@ export default function App() {
               rentalTrialRecords={rentalTrialRecords}
               inventoryRecords={inventoryRecords}
               filters={chartFilters}
+              ol5CoverStyles={ol5CoverStyles}
             />
           )}
 

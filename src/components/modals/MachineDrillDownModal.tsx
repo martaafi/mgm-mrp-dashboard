@@ -70,7 +70,7 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
                   className={`px-2.5 py-0.5 rounded-full text-xs font-bold border transition-colors ${
                     data.status === "Shortage"
                       ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800/50"
-                      : data.status === "Balanced"
+                      : data.status === "Balanced" || data.status === "Covered"
                         ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/50"
                         : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50"
                   }`}
@@ -100,7 +100,15 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
               <div className="text-2xl font-bold text-slate-800 dark:text-slate-200 mt-1">
                 {formatDecimal(data.totalRequired)}
               </div>
-              <span className="text-[10px] text-slate-400 dark:text-slate-500">units needed</span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                {data.peakDate
+                  ? `puncak harian · ${new Date(data.peakDate).toLocaleDateString("id-ID", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}`
+                  : "units needed"}
+              </span>
             </div>
             <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm rounded-xl p-3.5 transition-colors">
               <span className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
@@ -139,12 +147,54 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
             </div>
           </div>
 
+          {/* Cover / Substitusi + Net Gap */}
+          {((data.cover ?? 0) !== 0 ||
+            (data.netGap ?? data.gap) !== data.gap) && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 text-xs transition-colors">
+              <span className="font-semibold uppercase tracking-wider text-[10px] text-slate-500 dark:text-slate-400">
+                Cover / Substitusi
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded-md font-bold border ${
+                  (data.cover ?? 0) > 0
+                    ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                }`}
+              >
+                {formatSignedDecimal(data.cover ?? 0)} unit
+              </span>
+              {(data.coverDetails ?? []).map((detail, index) => (
+                <span
+                  key={`${detail.type}-${detail.machine}-${index}`}
+                  className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                >
+                  {detail.type === "in" ? "dari" : "ke"} {detail.machine}:{" "}
+                  {formatDecimal(detail.count)}
+                </span>
+              ))}
+              <span className="ml-auto font-semibold text-slate-500 dark:text-slate-400">
+                Net Gap:{" "}
+                <span
+                  className={
+                    (data.netGap ?? data.gap) < 0
+                      ? "text-red-600 dark:text-red-400"
+                      : (data.netGap ?? data.gap) === 0
+                        ? "text-slate-700 dark:text-slate-200"
+                        : "text-emerald-600 dark:text-emerald-400"
+                  }
+                >
+                  {formatSignedDecimal(data.netGap ?? data.gap)}
+                </span>
+              </span>
+            </div>
+          )}
+
           {/* IE Action Recommendation Box */}
           <div
             className={`p-4 rounded-xl border flex items-start space-x-3 transition-colors ${
               data.status === "Shortage"
                 ? "bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800/50 text-red-900 dark:text-red-200"
-                : data.status === "Balanced"
+                : data.status === "Balanced" || data.status === "Covered"
                   ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800/50 text-blue-900 dark:text-blue-200"
                   : "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800/50 text-emerald-900 dark:text-emerald-200"
             }`}
@@ -152,7 +202,7 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
             <div className="shrink-0 mt-0.5">
               {data.status === "Shortage" ? (
                 <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400" />
-              ) : data.status === "Balanced" ? (
+              ) : data.status === "Balanced" || data.status === "Covered" ? (
                 <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               ) : (
                 <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
@@ -269,6 +319,29 @@ export const MachineDrillDownModal: React.FC<MachineDrillDownModalProps> = ({
                 today.
               </div>
             )}
+
+            {data.lineDetails.length > 0 &&
+              data.lineRequiredSum !== undefined &&
+              data.lineRequiredSum !== data.totalRequired && (
+                <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  Total per line{" "}
+                  <strong>{formatDecimal(data.lineRequiredSum)}</strong> unit.
+                  Kolom <strong>Required</strong> memakai kebutuhan puncak
+                  harian ({formatDecimal(data.totalRequired)} unit
+                  {data.peakDate
+                    ? ` pada ${new Date(data.peakDate).toLocaleDateString(
+                        "id-ID",
+                        {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        },
+                      )}`
+                    : ""}
+                  ), bukan penjumlahan seluruh line — line berjalan di tanggal
+                  berbeda sehingga tidak dibutuhkan bersamaan.
+                </p>
+              )}
           </div>
         </div>
 

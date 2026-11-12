@@ -8,7 +8,8 @@ import {
   RentalTrialRecord,
   MachineCoverDetail,
 } from "../../types/mrp";
-import { getAdjustedAvailabilityForDateRange, isSunday, normalizeMachineKey, applyMachineSubstitution } from "../../utils/mrpCalculations";
+import { getAdjustedAvailabilityForDateRange, isSunday, normalizeMachineKey, applyMachineSubstitution, isOL5CoverActive, buildStyleWhitelist, isWhitelistedStyle } from "../../utils/mrpCalculations";
+import { buildStyleColorMap, getStyleColor } from "../../utils/styleColors";
 import { formatDecimal, formatSignedDecimal } from "../../utils/formatters";
 import { DateRangePicker } from "../filters/DateRangePicker";
 
@@ -19,6 +20,7 @@ interface DetailLayoutProps {
   rentalTrialRecords?: RentalTrialRecord[];
   initialDate?: string;
   initialEndDate?: string;
+  ol5CoverStyles?: string[];
 }
 
 export const DetailLayout: React.FC<DetailLayoutProps> = ({
@@ -28,6 +30,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
   rentalTrialRecords = [],
   initialDate,
   initialEndDate,
+  ol5CoverStyles = [],
 }) => {
   // Compute initial date range, ensuring we never default to a Sunday
   const defaultRange = useMemo(() => {
@@ -72,6 +75,11 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
   }, [initialDate, initialEndDate]);
 
   const { startDate, endDate } = dateRange;
+
+  // Warna style mengikuti tab Planning Style. Peta dibangun dari seluruh plan
+  // (bukan hanya rentang filter) supaya warna tetap sama walau rentang tanggal
+  // tiap tab berbeda.
+  const styleColorMap = useMemo(() => buildStyleColorMap(plans), [plans]);
 
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -263,7 +271,38 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
       linesCount: 0,
     }));
 
-    const substituted = applyMachineSubstitution(tempSummary);
+    // Gate cover OL5: hanya aktif jika ada style pada periode ini
+    // yang terdaftar di sheet "List Style Cover OL5".
+    const plansInRange = plans.filter(
+      (p) =>
+        p.date &&
+        (!startDate || p.date >= startDate) &&
+        (!endDate || p.date <= endDate),
+    );
+    const ol5CanCoverOL3 = isOL5CoverActive(plansInRange, ol5CoverStyles);
+
+    // Cap cover OL5 -> OL3: pada basis komponen ini (style terakhir per line),
+    // plafon = total kebutuhan OL3 dari line yang style-nya whitelist.
+    const styleWhitelist = buildStyleWhitelist(ol5CoverStyles);
+    const ol3Row = rows.find((r) => /^OL\s*3\b/i.test(r.machine.trim()));
+    let ol5CoverCap = 0;
+    if (ol3Row) {
+      activeLines.forEach((al) => {
+        if (al.line.toUpperCase() === "ACC") return;
+        const inWhitelist =
+          isWhitelistedStyle(al.style, styleWhitelist) ||
+          al.displayStyles.some((s) => isWhitelistedStyle(s, styleWhitelist));
+        if (inWhitelist) {
+          ol5CoverCap += ol3Row.lineRequirements[al.line] || 0;
+        }
+      });
+    }
+    ol5CoverCap = Math.round(ol5CoverCap * 100) / 100;
+
+    const substituted = applyMachineSubstitution(tempSummary, {
+      ol5CanCoverOL3,
+      ol5CoverCap,
+    });
 
     // Map substitution results back to rows
     const subMap = new Map(substituted.map((s) => [normalizeMachineKey(s.machine), s]));
@@ -306,7 +345,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
     });
 
     return { rows, totals };
-  }, [availabilities, requirements, activeLines, startDate, endDate, rentalTrialRecords]);
+  }, [availabilities, requirements, activeLines, startDate, endDate, rentalTrialRecords, plans, ol5CoverStyles]);
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col h-full overflow-hidden transition-colors">
@@ -385,7 +424,7 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
             <table className="w-full text-[11px] sm:text-xs text-right border-separate border-spacing-0 whitespace-nowrap">
               <thead className="sticky top-0 z-20 shadow-sm text-slate-700 dark:text-slate-300">
                 {/* Header Row 1: Styles */}
-                <tr className="bg-emerald-600 dark:bg-emerald-800 text-[10px] uppercase font-bold tracking-widest text-emerald-50 dark:text-emerald-100">
+                <tr className="bg-white dark:bg-slate-900 text-[10px] uppercase font-bold tracking-widest text-emerald-50 dark:text-emerald-100">
                   <th
                     rowSpan={2}
                     className="sticky left-0 z-30 bg-emerald-700 dark:bg-emerald-900 px-4 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 text-left align-middle min-w-[200px] shadow-[2px_0_5px_rgba(0,0,0,0.15)] dark:shadow-[2px_0_5px_rgba(0,0,0,0.35)]"
@@ -452,32 +491,47 @@ export const DetailLayout: React.FC<DetailLayoutProps> = ({
                 <th className="px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 bg-emerald-700 dark:bg-emerald-900 w-16 text-center align-middle">
                   Style
                 </th>
-                {activeLines.map((al) => (
-                  <th
-                    key={`style-${al.line}`}
-                    className="px-3 py-3 border-r border-b border-emerald-500/50 dark:border-emerald-700 bg-emerald-600 dark:bg-emerald-800 text-center whitespace-normal min-w-[110px] align-middle text-emerald-50 dark:text-emerald-100 text-[10px] leading-tight normal-case font-semibold tracking-normal"
-                    title={
-                      al.displayStyles.length > 1
-                        ? `Menampilkan ${al.displayStyles.length} style pada rentang ini: ${al.displayStyles.join(", ")}. Perhitungan mesin menggunakan style terakhir (${al.style}).`
-                        : al.style
-                    }
-                  >
-                    <div className="flex flex-col items-center justify-center gap-1 py-0.5">
-                      {al.displayStyles.map((s, idx) => (
-                        <span
-                          key={idx}
-                          className={`block leading-tight text-center ${
-                            al.displayStyles.length > 1
-                              ? "bg-emerald-700/60 dark:bg-emerald-950/60 px-1.5 py-1 rounded border border-emerald-400/20 w-full"
-                              : ""
-                          }`}
-                        >
-                          {s}
+                {activeLines.map((al) => {
+                  const isSingleStyle = al.displayStyles.length === 1;
+                  const singleStyleColor = isSingleStyle
+                    ? getStyleColor(al.displayStyles[0], styleColorMap)
+                    : "";
+                  return (
+                    <th
+                      key={`style-${al.line}`}
+                      className={`p-0 border-r border-b border-emerald-500/50 dark:border-emerald-700 text-center whitespace-normal min-w-[110px] align-middle text-[10px] leading-tight normal-case font-semibold tracking-normal ${
+                        isSingleStyle
+                          ? singleStyleColor
+                          : "bg-white dark:bg-slate-900"
+                      }`}
+                      title={
+                        al.displayStyles.length > 1
+                          ? `Menampilkan ${al.displayStyles.length} style pada rentang ini: ${al.displayStyles.join(", ")}. Perhitungan mesin menggunakan style terakhir (${al.style}).`
+                          : al.style
+                      }
+                    >
+                      {isSingleStyle ? (
+                        <span className="flex h-full w-full items-center justify-center px-1.5 py-1.5">
+                          {al.displayStyles[0]}
                         </span>
-                      ))}
-                    </div>
-                  </th>
-                ))}
+                      ) : (
+                        <div className="flex h-full w-full flex-col divide-y divide-black/10 dark:divide-white/10">
+                          {al.displayStyles.map((s, idx) => (
+                            <span
+                              key={idx}
+                              className={`flex w-full flex-1 items-center justify-center px-1.5 py-1.5 text-center leading-tight ${getStyleColor(
+                                s,
+                                styleColorMap,
+                              )}`}
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
               {/* Header Row 2: Lines */}
               <tr className="bg-emerald-600 dark:bg-emerald-800 text-[10px] uppercase font-bold tracking-widest text-emerald-100 dark:text-emerald-200">

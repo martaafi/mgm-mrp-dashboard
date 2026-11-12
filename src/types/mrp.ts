@@ -119,6 +119,15 @@ export interface DrillDownData {
   utilization: number;
   lineDetails: DrillDownLineDetail[];
   recommendation: string;
+  /** Tanggal dengan kebutuhan harian tertinggi (acuan `totalRequired`). */
+  peakDate?: string;
+  /** Jumlah `required` dari seluruh line (info saja; tidak dipakai untuk gap). */
+  lineRequiredSum?: number;
+  /** Cover/substitusi hasil perhitungan summary (setelah OL/OVD). */
+  cover?: number;
+  /** Gap setelah cover/substitusi. */
+  netGap?: number;
+  coverDetails?: MachineCoverDetail[];
 }
 
 export interface HeatmapCell {

@@ -47,6 +47,7 @@ interface ChartDashboardProps {
   rentalTrialRecords: RentalTrialRecord[];
   inventoryRecords: InventoryRecord[];
   filters?: FilterState;
+  ol5CoverStyles?: string[];
 }
 
 // Custom Bar shape: tidak menggambar apa pun untuk segmen bernilai 0,
@@ -390,6 +391,7 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
   rentalTrialRecords,
   inventoryRecords,
   filters,
+  ol5CoverStyles = [],
 }) => {
   const [selectedMachine, setSelectedMachine] = useState<string>("ALL");
 
@@ -503,8 +505,14 @@ export const ChartDashboard: React.FC<ChartDashboardProps> = ({
 
   // Overall machine requirements summary for capacity analysis
   const machineRequirements = useMemo(
-    () => calculateMachineRequirements(plans, requirements, availabilities),
-    [plans, requirements, availabilities],
+    () =>
+      calculateMachineRequirements(
+        plans,
+        requirements,
+        availabilities,
+        ol5CoverStyles,
+      ),
+    [plans, requirements, availabilities, ol5CoverStyles],
   );
 
   // Capacity Overview KPI Stats

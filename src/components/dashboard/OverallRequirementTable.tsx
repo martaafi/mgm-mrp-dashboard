@@ -464,6 +464,7 @@ export const OverallRequirementTable: React.FC<
                 <th className="py-3 px-4 text-center">
                   <button
                     onClick={() => handleSort("required")}
+                    title="Kebutuhan puncak harian per tipe mesin (bukan penjumlahan seluruh line)"
                     className="flex items-center justify-center space-x-1 mx-auto hover:text-slate-900 transition-colors"
                   >
                     <span>Required</span>

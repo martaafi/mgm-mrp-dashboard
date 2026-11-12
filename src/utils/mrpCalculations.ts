@@ -8,6 +8,7 @@ import {
   FilterState,
   DrillDownData,
   DrillDownLineDetail,
+  MachineCoverDetail,
   HeatmapCell,
   GapStatus,
   TrendDataPoint,
@@ -152,13 +153,116 @@ export const normalizeMachineKey = (name: string): string => {
 };
 
 /**
+ * Normalizes a style name for whitelist comparison.
+ */
+export const normalizeStyleKey = (name: string): string =>
+  (name || "")
+    .replace(/\u00A0/g, " ")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+
+const isUsableStyleKey = (key: string): boolean =>
+  key !== "" && key !== "-" && !key.includes("NO PLAN");
+
+/**
+ * Mengumpulkan semua style yang berjalan pada periode `plans`
+ * (kolom C `displayStyle` DAN kolom D `style`), membuang Sunday,
+ * "NO PLANNING", dan nilai kosong. Satu sel bisa berisi beberapa
+ * style dipisah koma/newline (mis. "305836 SHORT CT 120 M, 302706 SHORT 100").
+ */
+export const collectActiveStyles = (
+  plans: ProductionPlan[],
+): Set<string> => {
+  const styles = new Set<string>();
+
+  plans.forEach((p) => {
+    if (!p.date || isSunday(p.date)) return;
+    [p.displayStyle, p.style].forEach((raw) => {
+      (raw || "")
+        .split(/[\n,]+/)
+        .map((part) => normalizeStyleKey(part))
+        .filter(isUsableStyleKey)
+        .forEach((key) => styles.add(key));
+    });
+  });
+
+  return styles;
+};
+
+/**
+ * Membangun himpunan style whitelist (sudah dinormalisasi) dari sheet
+ * "List Style Cover OL5".
+ */
+export const buildStyleWhitelist = (ol5CoverStyles: string[]): Set<string> =>
+  new Set(
+    (ol5CoverStyles || [])
+      .map((style) => normalizeStyleKey(style))
+      .filter(isUsableStyleKey),
+  );
+
+/**
+ * Bernilai true jika salah satu style pada sel (bisa gabungan dipisah
+ * koma/newline) terdaftar di whitelist.
+ */
+export const isWhitelistedStyle = (
+  rawStyle: string,
+  whitelist: Set<string>,
+): boolean => {
+  if (!rawStyle || whitelist.size === 0) return false;
+  return rawStyle
+    .split(/[\n,]+/)
+    .map((part) => normalizeStyleKey(part))
+    .some((key) => isUsableStyleKey(key) && whitelist.has(key));
+};
+
+/**
+ * Gate cover OL5: bernilai true jika minimal satu style pada periode
+ * terdaftar di sheet "List Style Cover OL5" (kolom A).
+ */
+export const isOL5CoverActive = (
+  plans: ProductionPlan[],
+  ol5CoverStyles: string[],
+): boolean => {
+  const allowed = buildStyleWhitelist(ol5CoverStyles);
+  if (allowed.size === 0) return false;
+
+  for (const style of collectActiveStyles(plans)) {
+    if (allowed.has(style)) return true;
+  }
+  return false;
+};
+
+export interface SubstitutionOptions {
+  /**
+   * OL5 hanya boleh menutup OL3 jika style pada periode terdaftar
+   * di whitelist "List Style Cover OL5". Default false (fail-safe).
+   */
+  ol5CanCoverOL3?: boolean;
+  /**
+   * Plafon (dalam unit OL3) untuk cover OL5 -> OL3, yaitu porsi kebutuhan
+   * OL3 yang berasal dari style whitelist pada hari puncak OL3.
+   * Default 0 (fail-safe: tanpa cap yang diketahui, jangan menutup).
+   */
+  ol5CoverCap?: number;
+}
+
+/**
  * Applies machine substitution rules:
  * 1. OVD group: OVD1 (+ puller), OVD2, OVD3 (Mutual pooling - anyone with surplus can cover deficits)
- * 2. OL group: OL3 <- OL4 <- OL5 (Hierarchical cascade - OL4 covers OL3, OL5 covers OL3 and/or OL4)
+ * 2. OL group:
+ *    - OL4 selalu dapat menutup OL3.
+ *    - OL5 hanya dapat menutup OL3 jika `ol5CanCoverOL3 === true`
+ *      (minimal satu style periode terdaftar di "List Style Cover OL5"),
+ *      dan jumlahnya dibatasi `ol5CoverCap`.
+ *    - OL5 TIDAK PERNAH menutup OL4.
  */
 export const applyMachineSubstitution = (
-  items: MachineRequirementSummary[]
+  items: MachineRequirementSummary[],
+  options: SubstitutionOptions = {},
 ): MachineRequirementSummary[] => {
+  const ol5CanCoverOL3 = options.ol5CanCoverOL3 === true;
+  const ol5CoverCap = Math.max(0, options.ol5CoverCap ?? 0);
   const mapByName = new Map<string, MachineRequirementSummary>();
   items.forEach((item) => {
     mapByName.set(normalizeMachineKey(item.machine), {
@@ -215,20 +319,21 @@ export const applyMachineSubstitution = (
     }
   }
 
-  // 2. Group OL (Cascade: OL3 <- OL4 <- OL5)
+  // 2. Group OL (Cascade: OL4 -> OL3; OL5 -> OL3 hanya jika gate style aktif)
   const ol3 = getByPattern(/^OL\s*3\b/i);
   const ol4 = getByPattern(/^OL\s*4\b/i);
   const ol5 = getByPattern(/^OL\s*5\b/i);
 
   const transferUnits = (
     receiver: MachineRequirementSummary,
-    provider: MachineRequirementSummary
+    provider: MachineRequirementSummary,
+    maxTransfer = Infinity,
   ) => {
     const recNet = receiver.netGap ?? receiver.gap;
     const provNet = provider.netGap ?? provider.gap;
     if (recNet < 0 && provNet > 0) {
       const needed = Math.abs(recNet);
-      const transfer = Math.min(needed, provNet);
+      const transfer = Math.min(needed, provNet, maxTransfer);
       if (transfer > 0) {
         receiver.netGap = recNet + transfer;
         receiver.cover = (receiver.cover || 0) + transfer;
@@ -251,20 +356,24 @@ export const applyMachineSubstitution = (
     }
   };
 
-  // Step 2a: OL3 dicover oleh OL4
+  // Step 2a: OL3 selalu bisa dicover oleh OL4
   if (ol3 && ol4) {
     transferUnits(ol3, ol4);
   }
 
-  // Step 2b: Sisa defisit OL3 dicover oleh OL5
-  if (ol3 && ol5 && (ol3.netGap ?? ol3.gap) < 0) {
-    transferUnits(ol3, ol5);
+  // Step 2b: Sisa defisit OL3 boleh dicover OL5 HANYA jika gate style aktif
+  // dan jumlahnya dibatasi porsi whitelist pada hari puncak OL3.
+  if (
+    ol3 &&
+    ol5 &&
+    (ol3.netGap ?? ol3.gap) < 0 &&
+    ol5CanCoverOL3 &&
+    ol5CoverCap > 0
+  ) {
+    transferUnits(ol3, ol5, ol5CoverCap);
   }
 
-  // Step 2c: Defisit OL4 dicover oleh OL5
-  if (ol4 && ol5 && (ol4.netGap ?? ol4.gap) < 0) {
-    transferUnits(ol4, ol5);
-  }
+  // Step 2c dihapus: OL5 tidak pernah menutup OL4.
 
   // Update status final
   mapByName.forEach((item) => {
@@ -294,10 +403,12 @@ export const applyMachineSubstitution = (
 export const calculateMachineRequirements = (
   plans: ProductionPlan[],
   requirements: MachineRequirementPerStyle[],
-  availabilities: MachineAvailability[]
+  availabilities: MachineAvailability[],
+  ol5CoverStyles: string[] = [],
 ): MachineRequirementSummary[] => {
   // 1. Determine final style for each (date, line)
   const finalStylePerDateLine: Record<string, string> = {}; // key: "YYYY-MM-DD|Line", value: style
+  const finalPlanPerDateLine: Record<string, ProductionPlan> = {}; // plan terakhir per date|line
   const linesPerDate: Record<string, string[]> = {};
   
   plans.forEach(plan => {
@@ -305,6 +416,7 @@ export const calculateMachineRequirements = (
     const key = `${plan.date}|${plan.line}`;
     // Overwrites previous styles for the same date and line, keeping only the last one
     finalStylePerDateLine[key] = plan.style;
+    finalPlanPerDateLine[key] = plan;
     if (!linesPerDate[plan.date]) linesPerDate[plan.date] = [];
     if (!linesPerDate[plan.date].includes(plan.line)) {
       linesPerDate[plan.date].push(plan.line);
@@ -314,6 +426,11 @@ export const calculateMachineRequirements = (
   // Map of machine -> date -> required count
   const dateMachineRequiredMap: Record<string, Record<string, number>> = {};
   const linesUsingMachine: Record<string, Set<string>> = {};
+
+  // Akumulasi kebutuhan OL3 yang berasal dari style whitelist, per tanggal.
+  // Dipakai untuk menghitung cap cover OL5 -> OL3 (Opsi A: hari puncak OL3).
+  const whitelistedOL3ByDate: Record<string, number> = {};
+  const styleWhitelist = buildStyleWhitelist(ol5CoverStyles);
 
   // Optimize requirements lookup by building a dictionary
   const reqsByStyle: Record<string, MachineRequirementPerStyle[]> = {};
@@ -329,11 +446,24 @@ export const calculateMachineRequirements = (
 
     // Find requirements for this style using dictionary (O(1))
     const styleReqs = reqsByStyle[style] || [];
+
+    // Style line ini dianggap whitelist jika kolom C (displayStyle) ATAU
+    // kolom D (style) berisi style yang terdaftar di "List Style Cover OL5".
+    const planForLine = finalPlanPerDateLine[key];
+    const lineIsWhitelisted =
+      !!planForLine &&
+      (isWhitelistedStyle(planForLine.displayStyle || "", styleWhitelist) ||
+        isWhitelistedStyle(planForLine.style || "", styleWhitelist));
     
     styleReqs.forEach(req => {
       if (req.kebutuhanTotal <= 0) return; // Skip lines with 0 requirements
 
       const machineType = req.jenisMesin.trim();
+
+      if (lineIsWhitelisted && /^OL\s*3\b/i.test(machineType)) {
+        whitelistedOL3ByDate[date] =
+          (whitelistedOL3ByDate[date] || 0) + req.kebutuhanTotal;
+      }
       
       if (!dateMachineRequiredMap[machineType]) {
         dateMachineRequiredMap[machineType] = {};
@@ -387,6 +517,31 @@ export const calculateMachineRequirements = (
       ? dailyRequirements.reduce((max, val) => (val > max ? val : max), 0) 
       : 0;
   });
+
+  // Cap cover OL5 -> OL3 (Opsi A):
+  // cari hari puncak OL3, lalu ambil porsi kebutuhan OL3 yang berasal dari
+  // style whitelist pada hari tersebut. Jika ada beberapa hari dengan nilai
+  // puncak sama, ambil porsi whitelist terbesar.
+  const ol3TypeKey = Object.keys(dateMachineRequiredMap).find((machineType) =>
+    /^OL\s*3\b/i.test(machineType.trim()),
+  );
+  let ol5CoverCap = 0;
+  if (ol3TypeKey) {
+    const peakOL3 = requiredMap[ol3TypeKey] || 0;
+    if (peakOL3 > 0) {
+      Object.entries(dateMachineRequiredMap[ol3TypeKey]).forEach(
+        ([date, dailyOL3]) => {
+          if (Math.abs(dailyOL3 - peakOL3) < 1e-9) {
+            ol5CoverCap = Math.max(
+              ol5CoverCap,
+              whitelistedOL3ByDate[date] || 0,
+            );
+          }
+        },
+      );
+    }
+  }
+  ol5CoverCap = Math.round(ol5CoverCap * 100) / 100;
 
   // Combine with available machines list, strictly ignoring "total" rows from data sources
   const allMachineTypes = new Set([
@@ -449,8 +604,14 @@ export const calculateMachineRequirements = (
     });
   });
 
-  // Apply substitution / cover logic (OVD group mutual pooling, OL group cascade)
-  const substitutedResult = applyMachineSubstitution(result);
+  // Apply substitution / cover logic
+  // (OVD mutual pooling; OL4 -> OL3 selalu; OL5 -> OL3 hanya jika gate style
+  // aktif dan dibatasi porsi whitelist pada hari puncak OL3)
+  const ol5CanCoverOL3 = isOL5CoverActive(plans, ol5CoverStyles);
+  const substitutedResult = applyMachineSubstitution(result, {
+    ol5CanCoverOL3,
+    ol5CoverCap,
+  });
 
   // Sort by required descending as default
   return substitutedResult.sort((a, b) => b.required - a.required);
@@ -530,11 +691,18 @@ export const buildLineMachineMatrix = (
 /**
  * Computes drill-down details for a selected Machine type
  */
+export interface DrillDownSubstitution {
+  cover?: number;
+  netGap?: number;
+  coverDetails?: MachineCoverDetail[];
+}
+
 export const getMachineDrillDown = (
   machineType: string,
   plans: ProductionPlan[],
   requirements: MachineRequirementPerStyle[],
-  availabilities: MachineAvailability[]
+  availabilities: MachineAvailability[],
+  substitution?: DrillDownSubstitution,
 ): DrillDownData => {
   const availObj = availabilities.find(
     (a) => a.jenisMesin.toLowerCase() === machineType.toLowerCase()
@@ -600,10 +768,38 @@ export const getMachineDrillDown = (
   const dailyRequirements = Object.values(dateRequiredMap);
   const totalRequired = dailyRequirements.length > 0 ? dailyRequirements.reduce((max, val) => (val > max ? val : max), 0) : 0;
 
+  // Tanggal acuan `totalRequired` = hari dengan kebutuhan harian tertinggi.
+  // Jika ada beberapa hari bernilai sama, ambil tanggal terakhir.
+  let peakDate: string | undefined;
+  if (totalRequired > 0) {
+    Object.entries(dateRequiredMap).forEach(([date, value]) => {
+      if (Math.abs(value - totalRequired) < 1e-9) {
+        if (!peakDate || date > peakDate) peakDate = date;
+      }
+    });
+  }
+
+  const lineRequiredSum = Math.round(
+    lineDetails.reduce((sum, d) => sum + d.required, 0) * 100,
+  ) / 100;
+
   const gap = totalAvailable - totalRequired;
+
+  // Cover/substitusi dari perhitungan summary (opsional). Tanpa data ini,
+  // netGap = gap sehingga tampilan tetap jalan seperti sebelumnya.
+  const cover = Math.round((substitution?.cover ?? 0) * 100) / 100;
+  const netGap = Math.round(
+    (substitution?.netGap ?? gap) * 100,
+  ) / 100;
+  const coverDetails = substitution?.coverDetails ?? [];
+
+  const formatNum = (value: number) =>
+    Math.round(value * 100) / 100;
+
   let status: GapStatus = 'Balanced';
-  if (gap < 0) status = 'Shortage';
-  else if (gap > 0) status = 'Available';
+  if (netGap < 0) status = 'Shortage';
+  else if (gap < 0) status = 'Covered';
+  else if (netGap > 0) status = 'Available';
 
   const utilization =
     totalAvailable > 0
@@ -612,13 +808,31 @@ export const getMachineDrillDown = (
       ? 100
       : 0;
 
-  // Generate actionable IE recommendation
+  // Generate actionable IE recommendation (berbasis net gap setelah cover)
+  const remainingDeficit = Math.max(0, -netGap);
+  const peakDateLabel = peakDate
+    ? new Date(`${peakDate}T00:00:00`).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "";
+  const peakText = peakDateLabel
+    ? ` pada tanggal puncak ${peakDateLabel}`
+    : '';
+  const coverNote =
+    gap < 0 && cover > 0
+      ? ` Defisit fisik ${formatNum(Math.abs(gap))} unit sudah dikurangi cover/substitusi ${formatNum(cover)} unit.`
+      : '';
+
   const recommendation =
-    gap < 0
-      ? `⚠️ PERINGATAN KEKURANGAN: Terdapat total defisit sebanyak ${Math.abs(gap)} unit untuk mesin ${machineType}. Rekomendasi: Pinjam ${Math.abs(gap)} mesin dari inventaris cadangan (buffer offline) atau minta transfer/sewa sementara dari line yang sedang tidak aktif. Evaluasi juga pelatihan silang (cross-training) operator agar mesin dapat dipakai bersama pada stasiun yang berdekatan.`
+    netGap < 0
+      ? `⚠️ PERINGATAN KEKURANGAN: Sisa defisit ${formatNum(remainingDeficit)} unit untuk mesin ${machineType}${peakText}.${coverNote} Rekomendasi: Pinjam ${formatNum(remainingDeficit)} mesin dari inventaris cadangan (buffer offline) atau minta transfer/sewa sementara dari line yang sedang tidak aktif. Evaluasi juga pelatihan silang (cross-training) operator agar mesin dapat dipakai bersama pada stasiun yang berdekatan.`
+      : gap < 0
+      ? `✅ TERTUTUP SUBSTITUSI: Defisit fisik ${formatNum(Math.abs(gap))} unit untuk mesin ${machineType}${peakText} sudah tertutup oleh cover/substitusi (${formatNum(cover)} unit). Tidak perlu penambahan mesin, cukup pastikan mesin pengganti benar-benar tersedia pada tanggal puncak.`
       : gap === 0
       ? `✅ SEIMBANG: Utilitas kapasitas tepat 100% (Kebutuhan: ${totalRequired} vs Ketersediaan: ${totalAvailable}). Lakukan jadwal perawatan rutin (preventive maintenance); hari ini tidak ada mesin cadangan yang tersisa di pabrik untuk tipe mesin ini.`
-      : `💡 SURPLUS / TERSEDIA: Terdapat ${gap} unit cadangan di inventaris pabrik (Kebutuhan: ${totalRequired} vs Ketersediaan: ${totalAvailable}). Mesin ini dapat dialokasikan untuk pergantian style berikutnya atau dirotasi untuk perawatan berkala.`;
+      : `💡 SURPLUS / TERSEDIA: Terdapat ${formatNum(gap)} unit cadangan di inventaris pabrik (Kebutuhan: ${totalRequired} vs Ketersediaan: ${totalAvailable}). Mesin ini dapat dialokasikan untuk pergantian style berikutnya atau dirotasi untuk perawatan berkala.`;
 
   return {
     machine: machineType,
@@ -629,6 +843,11 @@ export const getMachineDrillDown = (
     utilization,
     lineDetails,
     recommendation,
+    peakDate,
+    lineRequiredSum,
+    cover,
+    netGap,
+    coverDetails,
   };
 };
 

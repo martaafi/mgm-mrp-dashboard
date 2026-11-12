@@ -53,6 +53,7 @@ interface HistoryLayoutProps {
   requirements: MachineRequirementPerStyle[];
   availabilities: MachineAvailability[];
   rentalTrialRecords: RentalTrialRecord[];
+  ol5CoverStyles?: string[];
 }
 
 export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
@@ -61,6 +62,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
   requirements,
   availabilities,
   rentalTrialRecords,
+  ol5CoverStyles = [],
 }) => {
   // Format date helper: YYYY-MM-DD -> DD MMM YYYY
   const formatDate = (dateString: string) => {
@@ -299,6 +301,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       impactPlans,
       requirements,
       availabilities,
+      ol5CoverStyles,
     );
 
     // Before scenario (Hypothetical): Revert changed machine styles
@@ -334,6 +337,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
       hypotheticalPlans,
       requirements,
       availabilities,
+      ol5CoverStyles,
     );
 
     // Compare machines across both scenarios
@@ -415,6 +419,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
     selectedSnapshot,
     requirements,
     availabilities,
+    ol5CoverStyles,
   ]);
 
   // === CHART: Weekly Comparison Data ===
