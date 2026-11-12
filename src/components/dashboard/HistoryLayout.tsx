@@ -2590,7 +2590,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         )
                                       </div>
                                     </th>
-                                    <th className="px-1 py-2 font-semibold text-center text-slate-500 dark:text-slate-400 w-[11%] border-l border-slate-100 dark:border-slate-800">
+                                    <th className="px-1 py-2 font-semibold text-center text-slate-500 dark:text-slate-400 w-[13%] border-l border-slate-100 dark:border-slate-800">
                                       <div className="leading-tight">
                                         Net Gap
                                       </div>
@@ -2599,7 +2599,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         )
                                       </div>
                                     </th>
-                                    <th className="px-1 py-2 font-semibold text-center text-indigo-600 dark:text-indigo-400 w-[11%]">
+                                    <th className="px-1 py-2 font-semibold text-center text-indigo-600 dark:text-indigo-400 w-[13%]">
                                       <div className="leading-tight">
                                         Net Gap
                                       </div>
@@ -2611,7 +2611,7 @@ export const HistoryLayout: React.FC<HistoryLayoutProps> = ({
                                         )
                                       </div>
                                     </th>
-                                    <th className="px-1 py-2 font-semibold text-center w-[16%] border-l border-slate-100 dark:border-slate-800">
+                                    <th className="px-1 py-2 font-semibold text-center w-[12%] border-l border-slate-100 dark:border-slate-800">
                                       Status
                                     </th>
                                   </tr>
